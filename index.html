@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Scheduler Pre v2 — Staff + STSO</title>
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=20260902c" />
 </head>
 <body>
   <header class="topbar">
@@ -349,7 +349,6 @@
     </section>
   </main>
 
-  <!-- Follow Me floating docks (draggable / resizable, above page) -->
   <div id="team-follow-docks" class="team-follow-docks" hidden>
     <div id="team-stats-dock" class="team-float-panel team-stats-dock card" data-float="stats">
       <div class="float-panel-head" data-drag-handle>
@@ -367,7 +366,6 @@
     </div>
   </div>
 
-  <!-- Airport Configuration Modal -->
   <div id="airport-config-modal" class="modal">
     <div class="modal-content">
       <span class="modal-close" id="modal-close-btn">&times;</span>
@@ -395,7 +393,6 @@
     </div>
   </div>
 
-  <!-- Function coverage modal (DFO / BAG / PAX by time band) -->
   <div id="func-coverage-modal" class="modal">
     <div class="modal-content" style="max-width:920px">
       <span class="modal-close" id="func-coverage-close">&times;</span>
@@ -455,7 +452,6 @@
     </div>
   </div>
 
-  <!-- Per-shift, per-day start/end times modal -->
   <div id="shift-day-times-modal" class="modal">
     <div class="modal-content" style="max-width:580px">
       <span class="modal-close" id="shift-day-times-close">&times;</span>
@@ -485,8 +481,7 @@
       </div>
     </div>
   </div>
-  
-  <!-- NEW: Team Detail Modal -->
+
   <div id="team-detail-modal" class="modal">
     <div class="modal-content" style="max-width:720px">
       <span class="modal-close" id="team-detail-close">&times;</span>
@@ -497,22 +492,22 @@
     </div>
   </div>
 
-  <!-- Local libraries + app (classic scripts — works from OneDrive / file://, no server) -->
-  <script src="lib/dayjs.min.js"></script>
-  <script src="lib/Sortable.min.js"></script>
-  <script src="lib/luxon.min.js"></script>
-  <script src="js/constants.js"></script>
-  <script src="js/state.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/shifts.js"></script>
-  <script src="js/allocation.js"></script>
-  <script src="js/functions.js"></script>
-  <script src="js/render.js"></script>
-  <script src="js/reports.js"></script>
-  <script src="js/schedule.js"></script>
-  <script src="js/io.js"></script>
-  <script src="js/airport.js"></script>
-  <script src="js/teams.js"></script>
-  <script src="js/main.js"></script>
+  <script src="lib/dayjs.min.js?v=20260902c"></script>
+  <script src="lib/Sortable.min.js?v=20260902c"></script>
+  <script src="lib/luxon.min.js?v=20260902c"></script>
+  <script src="lib/exceljs.min.js?v=20260902c"></script>
+  <script src="js/constants.js?v=20260902c"></script>
+  <script src="js/state.js?v=20260902c"></script>
+  <script src="js/utils.js?v=20260902c"></script>
+  <script src="js/shifts.js?v=20260902c"></script>
+  <script src="js/allocation.js?v=20260902c"></script>
+  <script src="js/functions.js?v=20260902c"></script>
+  <script src="js/render.js?v=20260902c"></script>
+  <script src="js/reports.js?v=20260902c"></script>
+  <script src="js/schedule.js?v=20260902c"></script>
+  <script src="js/io.js?v=20260902c"></script>
+  <script src="js/airport.js?v=20260902c"></script>
+  <script src="js/teams.js?v=20260902c"></script>
+  <script src="js/main.js?v=20260902c"></script>
 </body>
 </html>
