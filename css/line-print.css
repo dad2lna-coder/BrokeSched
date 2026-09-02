@@ -1,0 +1,19 @@
+/* Lines tab + print colors */
+.cell-rdo {
+  background: #2e75b6 !important;
+  color: #ffffff !important;
+  opacity: 1;
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.cell-bag,
+.cell-function-duty.cell-bag,
+td.cell-bag {
+  background: #ffc000 !important;
+  color: #111111 !important;
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
