@@ -3,19 +3,6 @@ window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
-  S.switchTab = function (tabId) {
-    document.querySelectorAll(".tab-btn").forEach(function (btn) {
-      btn.classList.toggle("active", btn.dataset.tab === tabId);
-    });
-    document.querySelectorAll(".panel").forEach(function (p) {
-      p.classList.toggle("active", p.id === "tab-" + tabId);
-    });
-    if (tabId === "lines" && S.renderLines) S.renderLines();
-    if (tabId === "coverage" && S.renderCoverage) S.renderCoverage();
-    if (tabId === "teams" && S.renderTeams) S.renderTeams();
-    if (tabId === "reports" && S.renderReports) S.renderReports();
-  };
-
   function init() {
     if (S.$("cfg-start") && !S.$("cfg-start").value) {
       var d = S.parseStartDate(null);
@@ -82,15 +69,15 @@ window.Scheduler = window.Scheduler || {};
       });
     }
 
-    if(S.initAirportConfig) S.initAirportConfig();
-    if(S.renderShiftsTable) S.renderShiftsTable();
-    if(S.initTeams) S.initTeams();
-    if(S.initShiftDayTimes) S.initShiftDayTimes();
-    if(S.initFunctionCoverage) S.initFunctionCoverage();
-    if(S.initReports) S.initReports();
-    if(S.bindLinesUI) S.bindLinesUI();
-    if(S.initCoverageView) S.initCoverageView();
+    S.initAirportConfig();
+    S.renderShiftsTable();
+    if (S.initTeams) S.initTeams();
+    if (S.initShiftDayTimes) S.initShiftDayTimes();
+    if (S.initFunctionCoverage) S.initFunctionCoverage();
+    if (S.initReports) S.initReports();
+    if (S.bindLinesUI) S.bindLinesUI();
 
+    // Permanent + New team buttons (top of Teams tab + on Teams card)
     function onNewTeam(e) {
       if (e) {
         e.preventDefault();
@@ -102,12 +89,12 @@ window.Scheduler = window.Scheduler || {};
       if (S.updateStatus) S.updateStatus("Created " + (t && t.name ? t.name : "team"));
     }
     S.onNewTeam = onNewTeam;
-    ["btn-team-new", "btn-team-new-2", "btn-team-new-dock"].forEach(function (id) {
+    ["btn-team-new", "btn-team-new-2"].forEach(function (id) {
       var btn = S.$(id);
       if (btn) btn.addEventListener("click", onNewTeam);
     });
 
-    S.updateStatus("Scheduler ready.");
+    S.updateStatus("Scheduler Pre v2 — TSO + LTSO/STSO · open from folder (no server needed)");
     S.renderAll();
   }
 
