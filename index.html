@@ -39,29 +39,18 @@
         <div class="section-title">What this is</div>
         <p class="muted" style="margin:0">
           <strong>v2</strong> staffing balancer. <strong>FT / PT</strong> are operational TSO.
-          <strong>LTSO/STSO M/F</strong> are management, using the same shift dispersion and sex-ratio rules,
-          but not counted in main TSO totals. No DFO, bag/OS, or equipment.
+          <strong>LTSO/STSO M/F</strong> are management.
         </p>
       </div>
-
       <div class="card">
         <div class="section-title">Operating window & period</div>
         <div class="grid-2">
-          <label>Open
-            <input type="time" id="cfg-open" value="03:30" />
-          </label>
-          <label>Close
-            <input type="time" id="cfg-close" value="23:00" />
-          </label>
-          <label>Schedule start
-            <input type="date" id="cfg-start" />
-          </label>
-          <label>Weeks
-            <input type="number" id="cfg-weeks" min="1" max="8" value="1" />
-          </label>
+          <label>Open <input type="time" id="cfg-open" value="03:30" /></label>
+          <label>Close <input type="time" id="cfg-close" value="23:00" /></label>
+          <label>Schedule start <input type="date" id="cfg-start" /></label>
+          <label>Weeks <input type="number" id="cfg-weeks" min="1" max="8" value="1" /></label>
         </div>
       </div>
-
       <div class="card">
         <div class="section-title">Operational TSO (headcount by sex)</div>
         <div class="grid-2">
@@ -71,7 +60,6 @@
           <label>PT Female <input type="number" id="cfg-pt-f" min="0" value="4" /></label>
         </div>
       </div>
-
       <div class="card">
         <div class="section-title">LTSO (management, not in main TSO)</div>
         <div class="grid-2">
@@ -79,7 +67,6 @@
           <label>LTSO Female <input type="number" id="cfg-ltso-f" min="0" value="1" /></label>
         </div>
       </div>
-
       <div class="card">
         <div class="section-title">STSO (management, not in main TSO)</div>
         <div class="grid-2">
@@ -87,7 +74,6 @@
           <label>STSO Female <input type="number" id="cfg-stso-f" min="0" value="2" /></label>
         </div>
       </div>
-
       <div class="card">
         <div class="section-title">Function coverage (DFO / BAG / PAX)</div>
         <div class="toolbar">
@@ -96,7 +82,6 @@
           <span class="muted" id="cert-assign-hint"></span>
         </div>
       </div>
-
       <div class="card">
         <div class="section-title">Shifts</div>
         <div class="toolbar">
@@ -365,6 +350,7 @@
   <script src="js/allocation.js?v=20260902c"></script>
   <script src="js/functions.js?v=20260902c"></script>
   <script src="js/render.js?v=20260902c"></script>
+  <script src="js/line-colors.js?v=20260902c"></script>
   <script src="js/reports.js?v=20260902c"></script>
   <script src="js/schedule.js?v=20260902c"></script>
   <script src="js/io.js?v=20260902c"></script>
