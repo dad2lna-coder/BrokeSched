@@ -184,53 +184,95 @@ window.Scheduler = window.Scheduler || {};
     S.updateStatus("Cleared results. Configuration remains.");
   };
 
-  /** Excel-compatible CSV of all lines (opens in Excel; printable) */
-  S.exportLinesExcel = function () {
+  function loadScript(src, cb) {
+    var existing = document.querySelector('script[src="' + src + '"]');
+    if (existing && typeof ExcelJS !== "undefined") {
+      cb();
+      return;
+    }
+    var s = document.createElement("script");
+    s.src = src;
+    s.onload = cb;
+    s.onerror = function () {
+      if (S.updateStatus) S.updateStatus("Failed to load Excel library (lib/exceljs.min.js).");
+    };
+    document.head.appendChild(s);
+  }
+
+  function thinBlackBorder() {
+    var edge = { style: "thin", color: { argb: "FF000000" } };
+    return { top: edge, left: edge, bottom: edge, right: edge };
+  }
+
+  function applyBaseCell(cell, fillArgb, fontColor) {
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: false };
+    cell.font = { name: "Calibri", size: 11, color: { argb: fontColor || "FF000000" }, bold: false };
+    cell.border = thinBlackBorder();
+    if (fillArgb) {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillArgb } };
+    }
+  }
+
+  function dayDutyForExport(line, dayIndex) {
+    var duty = S.getRotationDuty ? S.getRotationDuty(line.id, dayIndex) : null;
+    if (duty) return duty;
+    if (line.function === "BAG" || line.function === "DFO" || line.function === "PAX") {
+      return line.function;
+    }
+    return null;
+  }
+
+  function generateAndDownloadXlsx() {
     var lines = S.state.lines || [];
     if (!lines.length) {
       if (S.updateStatus) S.updateStatus("No lines to export.");
       return;
     }
-    var days = (S.state.weekCount || 1) * 7;
-    var headers = [
-      "Team",
-      "Line",
-      "Shift",
-      "Start",
-      "End",
-      "Emp",
-      "Sex",
-      "Function",
-      "RDOs",
-      "Paid"
-    ];
-    for (var d = 0; d < days; d++) {
-      headers.push(S.dayLabel ? S.dayLabel(d) : "Day" + (d + 1));
-    }
+
+    var days = 7;
+    var dayNames = S.DAYS || ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    var metaHeaders = ["Team", "Line", "Shift", "Start", "End", "Emp", "Sex", "Function", "RDOs", "Paid"];
+    var headers = metaHeaders.slice();
+    for (var d = 0; d < days; d++) headers.push(dayNames[d]);
     headers.push("Hours");
 
-    function esc(v) {
-      var s = v == null ? "" : String(v);
-      if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-      return s;
-    }
+    var workbook = new ExcelJS.Workbook();
+    workbook.creator = "BrokeSched";
+    workbook.created = new Date();
+    var sheet = workbook.addWorksheet("Lines", {
+      views: [{ state: "frozen", xSplit: 0, ySplit: 1, activeCell: "A2" }]
+    });
 
-    var rows = [headers.map(esc).join(",")];
+    var tableRows = [];
+    var rowMeta = [];
+
     lines.forEach(function (line) {
       var teamMeta = S.teamMetaForLine ? S.teamMetaForLine(line.id) : { name: "" };
       var sh = S.getShift ? S.getShift(line.shiftId) : null;
-      var rdo =
-        S.rdoTextForLine
-          ? S.rdoTextForLine(line)
-          : (line.rdoDays || []).join(",");
+      var rdo = S.rdoTextForLine ? S.rdoTextForLine(line) : (line.rdoDays || []).join(",");
       var hours = 0;
-      var dayCells = [];
+      var dayValues = [];
+      var dayFlags = [];
       for (var i = 0; i < days; i++) {
-        var st = (S.state.schedule[line.id] && S.state.schedule[line.id][i]) || "RDO";
-        dayCells.push(st === "WORK" ? line.shiftLabel || "WORK" : "RDO");
-        if (st === "WORK") hours += line.paid || 0;
+        var sched = S.state.schedule[line.id] || S.state.schedule[String(line.id)] || [];
+        var st = sched[i] || "RDO";
+        var isWork = st === "WORK";
+        var duty = isWork ? dayDutyForExport(line, i) : null;
+        var isBag = isWork && (duty === "BAG" || duty === "BAGS" || duty === "baggage");
+        var label;
+        if (!isWork) {
+          label = "RDO";
+        } else if (isBag) {
+          label = "BAG";
+        } else {
+          label = line.shiftLabel || (sh && sh.start) || "WORK";
+        }
+        if (isWork) hours += line.paid || 0;
+        dayValues.push(label);
+        dayFlags.push({ isRdo: !isWork, isBag: isBag });
       }
-      var row = [
+
+      tableRows.push([
         teamMeta.name || "",
         line.lineCode || "",
         line.shiftName || (sh && sh.name) || line.shiftId || "",
@@ -241,24 +283,116 @@ window.Scheduler = window.Scheduler || {};
         line.function || "",
         rdo,
         line.paid || ""
-      ].concat(dayCells, [hours]);
-      rows.push(row.map(esc).join(","));
+      ].concat(dayValues, [hours]));
+      rowMeta.push(dayFlags);
     });
 
-    // BOM so Excel recognizes UTF-8
-    var csv = "\uFEFF" + rows.join("\r\n");
-    var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    var a = document.createElement("a");
-    var url = URL.createObjectURL(blob);
-    a.href = url;
-    a.download =
-      "scheduler-lines-" +
-      (S.dj ? S.dj().format("YYYY-MM-DD") : "export") +
-      ".csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    if (S.updateStatus) S.updateStatus("Exported lines CSV (open in Excel / print).");
+    sheet.addTable({
+      name: "BidLines",
+      ref: "A1",
+      headerRow: true,
+      totalsRow: false,
+      style: { theme: "TableStyleMedium2", showRowStripes: true },
+      columns: headers.map(function (h) { return { name: h, filterButton: true }; }),
+      rows: tableRows
+    });
+
+    var lastCol = headers.length;
+    var lastRow = tableRows.length + 1;
+    var headerFill = "FF1F4E79";
+    var zebraLight = "FFFFFFFF";
+    var zebraGrey = "FFEDEDED";
+    var rdoFill = "FF2E75B6";
+    var bagFill = "FFFFC000";
+
+    var headerRow = sheet.getRow(1);
+    headerRow.height = 22;
+    headerRow.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+    headerRow.alignment = { vertical: "middle", horizontal: "center" };
+    for (var c = 1; c <= lastCol; c++) {
+      var hc = headerRow.getCell(c);
+      hc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: headerFill } };
+      hc.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+      hc.border = thinBlackBorder();
+      hc.alignment = { vertical: "middle", horizontal: "center" };
+    }
+
+    for (var r = 2; r <= lastRow; r++) {
+      var row = sheet.getRow(r);
+      row.height = 18;
+      var stripe = (r % 2 === 0) ? zebraLight : zebraGrey;
+      var flags = rowMeta[r - 2] || [];
+      for (var col = 1; col <= lastCol; col++) {
+        var cell = row.getCell(col);
+        var dayOffset = col - (metaHeaders.length + 1);
+        var isDayCol = dayOffset >= 0 && dayOffset < days;
+        if (isDayCol && flags[dayOffset] && flags[dayOffset].isRdo) {
+          applyBaseCell(cell, rdoFill, "FFFFFFFF");
+          cell.font.bold = true;
+        } else if (isDayCol && flags[dayOffset] && flags[dayOffset].isBag) {
+          applyBaseCell(cell, bagFill, "FF000000");
+          cell.font.bold = true;
+        } else {
+          applyBaseCell(cell, stripe, "FF000000");
+        }
+      }
+    }
+
+    sheet.columns.forEach(function (col, idx) {
+      var header = headers[idx] || "";
+      var width = 10;
+      if (header === "Team") width = 14;
+      else if (header === "Line") width = 12;
+      else if (header === "Shift") width = 12;
+      else if (header === "Function") width = 12;
+      else if (header === "RDOs") width = 14;
+      else if (dayNames.indexOf(header) !== -1) width = 8;
+      else if (header === "Hours") width = 8;
+      col.width = width;
+    });
+
+    sheet.autoFilter = {
+      from: { row: 1, column: 1 },
+      to: { row: lastRow, column: lastCol }
+    };
+    sheet.pageSetup = {
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      paperSize: 9
+    };
+
+    workbook.xlsx.writeBuffer().then(function (buffer) {
+      var blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      });
+      var a = document.createElement("a");
+      var url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = "scheduler-lines-" + (S.dj ? S.dj().format("YYYY-MM-DD") : "export") + ".xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      if (S.updateStatus) S.updateStatus("Exported styled Excel (.xlsx) lines table.");
+    }).catch(function (err) {
+      console.error("Error generating Excel file:", err);
+      if (S.updateStatus) S.updateStatus("Failed to export Excel.");
+    });
+  }
+
+  S.exportLinesExcel = function () {
+    var lines = S.state.lines || [];
+    if (!lines.length) {
+      if (S.updateStatus) S.updateStatus("No lines to export.");
+      return;
+    }
+    if (S.updateStatus) S.updateStatus("Preparing Excel export...");
+    if (typeof ExcelJS === "undefined") {
+      loadScript("lib/exceljs.min.js", generateAndDownloadXlsx);
+    } else {
+      generateAndDownloadXlsx();
+    }
   };
 })(window.Scheduler);
