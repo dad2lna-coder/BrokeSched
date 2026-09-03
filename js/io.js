@@ -264,17 +264,20 @@ window.Scheduler = window.Scheduler || {};
         var isWork = st === "WORK";
         var duty = isWork ? dayDutyForExport(line, i) : null;
         var isBag = isWork && (duty === "BAG" || duty === "BAGS" || duty === "baggage");
+        var isDfo = isWork && duty === "DFO";
         var label;
         if (!isWork) {
           label = "RDO";
         } else if (isBag) {
           label = "BAG";
+        } else if (isDfo) {
+          label = "DFO";
         } else {
           label = line.shiftLabel || (sh && sh.start) || "WORK";
         }
         if (isWork) hours += line.paid || 0;
         dayValues.push(label);
-        dayFlags.push({ isRdo: !isWork, isBag: isBag });
+        dayFlags.push({ isRdo: !isWork, isBag: isBag, isDfo: isDfo });
       }
 
       tableRows.push([
@@ -301,7 +304,8 @@ window.Scheduler = window.Scheduler || {};
     var zebraLight = "FFFFFFFF";
     var zebraGrey = "FFEDEDED";
     var rdoFill = "FF2E75B6";
-    var bagFill = "FFFFC000";
+    var bagFill = "FFF4B4B4";
+    var dfoFill = "FFFFC000";
 
     var headerRow = sheet.getRow(1);
     headerRow.height = 22;
@@ -329,6 +333,9 @@ window.Scheduler = window.Scheduler || {};
           cell.font.bold = true;
         } else if (isDayCol && flags[dayOffset] && flags[dayOffset].isBag) {
           applyBaseCell(cell, bagFill, "FF000000");
+          cell.font.bold = true;
+        } else if (isDayCol && flags[dayOffset] && flags[dayOffset].isDfo) {
+          applyBaseCell(cell, dfoFill, "FF000000");
           cell.font.bold = true;
         } else {
           applyBaseCell(cell, stripe, "FF000000");
