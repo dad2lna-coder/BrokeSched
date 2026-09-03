@@ -1,0 +1,95 @@
+.team-stat-team-line { cursor: pointer; }
+.team-stat-team-line:hover,
+.team-stat-team-line.is-followed { background: var(--panel2); }
+.team-stat-team-line.is-followed strong { color: var(--amber); }
+
+.team-summary-card {
+  background: #161d2a;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0.85rem 0.95rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.team-summary-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 0.5rem;
+}
+.team-summary-top .ts-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.team-summary-num { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.team-summary-edit { justify-self: center; align-self: center; }
+.team-summary-phase { justify-self: end; text-align: right; }
+.team-phase-pill {
+  display: inline-block;
+  margin-top: 0.2rem;
+  background: #3a2e10;
+  border: 1px solid #6b5210;
+  color: var(--amber);
+  border-radius: 10px;
+  padding: 0.35rem 0.75rem;
+  font-weight: 700;
+}
+.team-summary-mid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0.55rem 0;
+}
+.team-rdo-pill {
+  background: var(--panel2);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.team-total-pill {
+  background: #14301f;
+  color: var(--green);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-weight: 800;
+}
+.team-sex-split,
+.role-sex-bar {
+  display: flex;
+  overflow: hidden;
+  border-radius: 8px;
+  min-height: 1.7rem;
+  min-width: 4.5rem;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.team-sex-split span,
+.role-sex-bar span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+.sex-bar-m { background: #4a90d9; }
+.sex-bar-f { background: #d36a8c; }
+.team-role-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.45rem; }
+.team-role-box {
+  background: #101722;
+  border-radius: 12px;
+  padding: 0.55rem 0.4rem 0.5rem;
+  text-align: center;
+}
+.team-role-box .role-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
