@@ -10,7 +10,8 @@
 
 .cell-bag,
 .cell-function-duty.cell-bag,
-td.cell-bag {
+td.cell-bag,
+td.cell-work.cell-bag {
   background: #ffc000 !important;
   color: #111111 !important;
   font-weight: 700;

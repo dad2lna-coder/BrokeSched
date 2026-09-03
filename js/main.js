@@ -77,7 +77,6 @@ window.Scheduler = window.Scheduler || {};
     if (S.initReports) S.initReports();
     if (S.bindLinesUI) S.bindLinesUI();
 
-    // Permanent + New team buttons (top of Teams tab + on Teams card)
     function onNewTeam(e) {
       if (e) {
         e.preventDefault();
@@ -94,7 +93,7 @@ window.Scheduler = window.Scheduler || {};
       if (btn) btn.addEventListener("click", onNewTeam);
     });
 
-    S.updateStatus("Scheduler Pre v2 — TSO + LTSO/STSO · open from folder (no server needed)");
+    S.updateStatus("Scheduler Pre v2 — build 20260902h · Excel xlsx + BAG yellow");
     S.renderAll();
   }
 
