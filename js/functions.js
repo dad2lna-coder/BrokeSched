@@ -1,8 +1,6 @@
-/** Function coverage — role-based DFO pools, 50/50 AM-PM, daily rotation */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
-
   function defaultBands() {
     return [
       { start: "03:30", end: "04:00", stso: 1, ltso: 1, tso: 2 },
@@ -10,7 +8,6 @@ window.Scheduler = window.Scheduler || {};
       { start: "20:30", end: "23:00", stso: 1, ltso: 1, tso: 3 }
     ];
   }
-
   S.ensureFunctionCoverage = function () {
     if (!S.state.functionCoverage) S.state.functionCoverage = {};
     var fc = S.state.functionCoverage;
@@ -25,7 +22,6 @@ window.Scheduler = window.Scheduler || {};
     if (!S.state.functionRotation) S.state.functionRotation = {};
     return fc;
   };
-
   S.computeShiftAnchors = S.computeShiftAnchors || function () {
     var starts = {};
     (S.state.lines || []).forEach(function (l) {
@@ -43,7 +39,6 @@ window.Scheduler = window.Scheduler || {};
     if (pmN === 0) entries.forEach(function (e) { if (e.min >= 12 * 60 && e.n > pmN) { pmN = e.n; pm = e.min; } });
     return { am: am, pm: pm };
   };
-
   S.phaseOfStart = function (startMin, anchors, threshold) {
     threshold = threshold != null ? threshold : 15;
     anchors = anchors || S.computeShiftAnchors();
@@ -52,23 +47,15 @@ window.Scheduler = window.Scheduler || {};
     if (startMin < anchors.pm) return "AM";
     return "PM";
   };
-
   S.isAmSide = function (startMin, anchors, threshold) {
-    var p = S.phaseOfStart(startMin, anchors, threshold);
-    return p === "Opening" || p === "AM";
+    return S.phaseOfStart(startMin, anchors, threshold) === "Opening" || S.phaseOfStart(startMin, anchors, threshold) === "AM";
   };
-
-  S.lineStartMin = function (line) {
-    var sh = S.getShift(line.shiftId);
-    return sh ? S.timeToMin(sh.start) : 0;
-  };
-
+  S.lineStartMin = function (line) { var sh = S.getShift(line.shiftId); return sh ? S.timeToMin(sh.start) : 0; };
   S.lineRoleKey = function (line) {
     if (line.isStso || line.empClass === "STSO") return "STSO";
     if (line.isLtso || line.empClass === "LTSO") return "LTSO";
     return "TSO";
   };
-
   S.getRotationDuty = function (lineId, dayIndex) {
     var rot = S.state.functionRotation || {};
     var row = rot[String(lineId)] || rot[lineId];
@@ -82,7 +69,6 @@ window.Scheduler = window.Scheduler || {};
     if (line && (line.function === "BAG" || line.function === "DFO" || line.function === "PAX")) return line.function;
     return null;
   };
-
   S.lineCoversSlot = function (line, dayIndex, slotMin) {
     var sched = S.state.schedule[line.id] || S.state.schedule[String(line.id)];
     if (!sched || sched[dayIndex] !== "WORK") return false;
@@ -93,49 +79,33 @@ window.Scheduler = window.Scheduler || {};
       if (!sh) return false;
       times = { start: sh.start, end: sh.end };
     }
-    var a = S.timeToMin(times.start);
-    var c = S.timeToMin(times.end);
+    var a = S.timeToMin(times.start), c = S.timeToMin(times.end);
     if (c <= a) return slotMin >= a || slotMin < c;
     return slotMin >= a && slotMin < c;
   };
-
   S.bandForMinute = function (m, bands) {
     bands = bands || S.ensureFunctionCoverage().bands;
     for (var i = 0; i < bands.length; i++) {
-      var b = bands[i];
-      var s = S.timeToMin(b.start), e = S.timeToMin(b.end);
+      var b = bands[i], s = S.timeToMin(b.start), e = S.timeToMin(b.end);
       if (e <= s) e += 1440;
-      var mm = m;
-      if (e > 1440 && mm < s) mm += 1440;
+      var mm = m; if (e > 1440 && mm < s) mm += 1440;
       if (mm >= s && mm < e) return b;
     }
     return null;
   };
-
   S.openFunctionCoverageModal = function () {
     var fc = S.ensureFunctionCoverage();
     function setVal(id, v) { var el = S.$(id); if (el) el.value = v; }
     function setChk(id, v) { var el = S.$(id); if (el) el.checked = !!v; }
-    setVal("fc-pool-stso", fc.poolStsoDfo);
-    setVal("fc-pool-ltso", fc.poolLtsoDfo);
-    setVal("fc-pool-tso", fc.poolTsoDfo);
-    setVal("fc-pool-bag", fc.poolBag);
-    setVal("fc-phase-thr", fc.phaseThresholdMin);
-    setChk("fc-ampm-split", fc.amPmSplit);
-    S.renderFunctionBandsTable();
-    S.updateFunctionCoveragePreview();
-    var modal = S.$("func-coverage-modal");
-    if (modal) modal.style.display = "block";
+    setVal("fc-pool-stso", fc.poolStsoDfo); setVal("fc-pool-ltso", fc.poolLtsoDfo);
+    setVal("fc-pool-tso", fc.poolTsoDfo); setVal("fc-pool-bag", fc.poolBag);
+    setVal("fc-phase-thr", fc.phaseThresholdMin); setChk("fc-ampm-split", fc.amPmSplit);
+    S.renderFunctionBandsTable(); S.updateFunctionCoveragePreview();
+    var modal = S.$("func-coverage-modal"); if (modal) modal.style.display = "block";
   };
-
-  S.closeFunctionCoverageModal = function () {
-    var modal = S.$("func-coverage-modal");
-    if (modal) modal.style.display = "none";
-  };
-
+  S.closeFunctionCoverageModal = function () { var modal = S.$("func-coverage-modal"); if (modal) modal.style.display = "none"; };
   S.renderFunctionBandsTable = function () {
-    var tbody = S.$("fc-bands-tbody");
-    if (!tbody) return;
+    var tbody = S.$("fc-bands-tbody"); if (!tbody) return;
     var bands = S.ensureFunctionCoverage().bands;
     tbody.innerHTML = bands.map(function (b, i) {
       function num(key) {
@@ -148,7 +118,6 @@ window.Scheduler = window.Scheduler || {};
         '<td><button type="button" class="btn btn-red btn-sm" data-fc-remove="' + i + '">\u2715</button></td></tr>';
     }).join("");
   };
-
   S.readFunctionBandsFromDom = function () {
     var fc = S.ensureFunctionCoverage();
     var ps = S.$("fc-pool-stso"), pl = S.$("fc-pool-ltso"), pt = S.$("fc-pool-tso"), pb = S.$("fc-pool-bag");
@@ -172,28 +141,21 @@ window.Scheduler = window.Scheduler || {};
     fc.bands.sort(function (a, b) { return S.timeToMin(a.start) - S.timeToMin(b.start); });
     return fc;
   };
-
   S.updateFunctionCoveragePreview = function () {
-    var el = S.$("fc-preview");
-    if (!el) return;
-    var fc = S.ensureFunctionCoverage();
-    var anchors = S.computeShiftAnchors();
-    var thr = fc.phaseThresholdMin || 15;
+    var el = S.$("fc-preview"); if (!el) return;
+    var fc = S.ensureFunctionCoverage(), anchors = S.computeShiftAnchors(), thr = fc.phaseThresholdMin || 15;
     var bandTxt = (fc.bands || []).map(function (b) {
-      return (b.start || "?") + "\u2013" + (b.end || "?") + " need " + (b.stso || 0) + "-" + (b.ltso || 0) + "-" + (b.tso || 0);
-    }).join("  |  ");
-    el.textContent = "Pools DFO STSO " + (fc.poolStsoDfo || 0) + " \u00b7 LTSO " + (fc.poolLtsoDfo || 0) + " \u00b7 TSO " + (fc.poolTsoDfo || 0) + " \u00b7 BAG " + (fc.poolBag || 0) + " \u00b7 AM anchor " + S.slotLabel(anchors.am) + " \u00b7 PM anchor " + S.slotLabel(anchors.pm) + " \u00b7 phase \u00b1" + thr + "m \u00b7 " + (bandTxt || "no bands");
+      return (b.start || "?") + "-" + (b.end || "?") + " need " + (b.stso || 0) + "-" + (b.ltso || 0) + "-" + (b.tso || 0);
+    }).join(" | ");
+    el.textContent = "Pools DFO STSO " + (fc.poolStsoDfo || 0) + " LTSO " + (fc.poolLtsoDfo || 0) + " TSO " + (fc.poolTsoDfo || 0) + " BAG " + (fc.poolBag || 0) + " AM " + S.slotLabel(anchors.am) + " PM " + S.slotLabel(anchors.pm) + " " + (bandTxt || "no bands");
   };
-
   function ensureEligible(line) {
     if (!line.functionEligible || typeof line.functionEligible !== "object") line.functionEligible = { dfo: false, bag: false, pax: false };
     return line.functionEligible;
   }
-
   S.buildCertifiedPools = function (fc) {
     S.state.lines.forEach(function (l) { l.functionEligible = { dfo: false, bag: false, pax: false }; l.function = ""; });
-    var anchors = S.computeShiftAnchors();
-    var thr = fc.phaseThresholdMin || 15;
+    var anchors = S.computeShiftAnchors(), thr = fc.phaseThresholdMin || 15;
     function byRole(role) { return S.state.lines.filter(function (l) { return S.lineRoleKey(l) === role; }); }
     function markPool(role, n, key) {
       if (!n || n <= 0) return { am: 0, pm: 0, total: 0 };
@@ -209,24 +171,16 @@ window.Scheduler = window.Scheduler || {};
       function take(arr, count) {
         var taken = 0;
         for (var i = 0; i < arr.length && taken < count; i++) {
-          var el = ensureEligible(arr[i]);
-          if (el[key]) continue;
-          el[key] = true; taken++;
+          var el = ensureEligible(arr[i]); if (el[key]) continue; el[key] = true; taken++;
         }
         return taken;
       }
-      var gotAm = take(amSide, needAm);
-      var gotPm = take(pmSide, needPm);
-      var short = n - gotAm - gotPm;
-      if (short > 0) {
-        var rest = lines.filter(function (l) { return !ensureEligible(l)[key]; });
-        gotPm += take(rest, short);
-      }
+      var gotAm = take(amSide, needAm), gotPm = take(pmSide, needPm), short = n - gotAm - gotPm;
+      if (short > 0) gotPm += take(lines.filter(function (l) { return !ensureEligible(l)[key]; }), short);
       return { am: gotAm, pm: gotPm, total: gotAm + gotPm };
     }
     return { stso: markPool("STSO", fc.poolStsoDfo, "dfo"), ltso: markPool("LTSO", fc.poolLtsoDfo, "dfo"), tso: markPool("TSO", fc.poolTsoDfo, "dfo"), bag: markPool("TSO", fc.poolBag, "bag"), anchors: anchors };
   };
-
   S.generateFunctionAssignments = function () {
     var fc = S.readFunctionBandsFromDom();
     if (!S.state.lines || !S.state.lines.length) { if (S.updateStatus) S.updateStatus("Generate lines first."); return; }
@@ -263,9 +217,7 @@ window.Scheduler = window.Scheduler || {};
       return arr.slice().sort(function (a, b) {
         var ca = dutyCount[String(a.id)] || 0, cb = dutyCount[String(b.id)] || 0;
         if (ca !== cb) return ca - cb;
-        var sa = S.lineStartMin(a), sb = S.lineStartMin(b);
-        if (sa !== sb) return sa - sb;
-        return String(a.id).localeCompare(String(b.id));
+        return S.lineStartMin(a) - S.lineStartMin(b) || String(a.id).localeCompare(String(b.id));
       });
     }
     function countsAtSlot(d, slotMin) {
@@ -296,78 +248,53 @@ window.Scheduler = window.Scheduler || {};
       }
       return false;
     }
-    function startFitsBand(line, bandStart) { return S.lineStartMin(line) >= bandStart - 5; }
-    for (var d = 0; d < days; d++) {
+    function candOk(l, d, bandStart, allowOvershoot) {
+      if (getDuty(l.id, d)) return false;
+      if (!allowOvershoot && wouldOvershootEarlierBands(l, d, bandStart)) return false;
+      return true;
+    }
+    function fillBandsForDay(d, allowOvershoot) {
       (fc.bands || []).forEach(function (band) {
         var needS = band.stso || 0, needL = band.ltso || 0, needT = band.tso || 0;
         if (needS + needL + needT <= 0) return;
-        var slots = bandSlots(band);
-        var bandStart = S.timeToMin(band.start);
-        var guard = 0, changed = true;
+        var slots = bandSlots(band), bandStart = S.timeToMin(band.start), guard = 0, changed = true;
         while (changed && guard < 200) {
           changed = false; guard++;
           for (var si = 0; si < slots.length; si++) {
-            var slotMin = slots[si];
-            var have = countsAtSlot(d, slotMin);
-            var defS = Math.max(0, needS - have.STSO);
-            var defL = Math.max(0, needL - have.LTSO);
-            var defT = Math.max(0, needT - have.TSO);
+            var slotMin = slots[si], have = countsAtSlot(d, slotMin);
+            var defS = Math.max(0, needS - have.STSO), defL = Math.max(0, needL - have.LTSO), defT = Math.max(0, needT - have.TSO);
             if (defS + defL + defT <= 0) continue;
             var covering = S.state.lines.filter(function (l) { return worksDay(l, d) && S.lineCoversSlot(l, d, slotMin); });
             if (defS > 0) {
-              var stsoCands = fairSort(covering.filter(function (l) {
-                return S.lineRoleKey(l) === "STSO" && !getDuty(l.id, d) && !wouldOvershootEarlierBands(l, d, bandStart);
-              }));
-              for (var siS = 0; siS < stsoCands.length && defS > 0; siS++) {
-                if (setDuty(stsoCands[siS].id, d, "DFO")) { defS--; changed = true; }
-              }
+              var stsoCands = fairSort(covering.filter(function (l) { return S.lineRoleKey(l) === "STSO" && candOk(l, d, bandStart, allowOvershoot); }));
+              for (var i = 0; i < stsoCands.length && defS > 0; i++) { if (setDuty(stsoCands[i].id, d, "DFO")) { defS--; changed = true; } }
             }
             if (defL > 0) {
-              var ltsoElig = fairSort(covering.filter(function (l) {
-                return S.lineRoleKey(l) === "LTSO" && !getDuty(l.id, d) && ensureEligible(l).dfo && !wouldOvershootEarlierBands(l, d, bandStart);
-              }));
-              var ltsoAny = fairSort(covering.filter(function (l) {
-                return S.lineRoleKey(l) === "LTSO" && !getDuty(l.id, d) && !wouldOvershootEarlierBands(l, d, bandStart);
-              }));
-              function takeL(arr) {
-                for (var i = 0; i < arr.length && defL > 0; i++) {
-                  if (setDuty(arr[i].id, d, "DFO")) { defL--; changed = true; }
-                }
-              }
-              takeL(ltsoElig); takeL(ltsoAny);
+              function takeL(arr) { for (var i = 0; i < arr.length && defL > 0; i++) { if (setDuty(arr[i].id, d, "DFO")) { defL--; changed = true; } } }
+              takeL(fairSort(covering.filter(function (l) { return S.lineRoleKey(l) === "LTSO" && ensureEligible(l).dfo && candOk(l, d, bandStart, allowOvershoot); })));
+              takeL(fairSort(covering.filter(function (l) { return S.lineRoleKey(l) === "LTSO" && candOk(l, d, bandStart, allowOvershoot); })));
             }
             if (defT > 0) {
-              function tsoRank(l) {
-                var delta = S.lineStartMin(l) - bandStart;
-                return delta < -15 ? 20000 - delta : Math.abs(delta);
-              }
+              function tsoRank(l) { var delta = S.lineStartMin(l) - bandStart; return delta < -15 ? 20000 - delta : Math.abs(delta); }
               function sortTso(arr) {
                 return arr.slice().sort(function (a, b) {
                   var ca = dutyCount[String(a.id)] || 0, cb = dutyCount[String(b.id)] || 0;
                   if (ca !== cb) return ca - cb;
-                  var ra = tsoRank(a), rb = tsoRank(b);
-                  if (ra !== rb) return ra - rb;
-                  return String(a.id).localeCompare(String(b.id));
+                  return tsoRank(a) - tsoRank(b) || String(a.id).localeCompare(String(b.id));
                 });
               }
-              function tsoOk(l) {
-                return S.lineRoleKey(l) === "TSO" && !getDuty(l.id, d) && !wouldOvershootEarlierBands(l, d, bandStart);
-              }
-              var tsoBag = sortTso(covering.filter(function (l) { return tsoOk(l) && ensureEligible(l).bag; }));
-              var tsoDfo = sortTso(covering.filter(function (l) { return tsoOk(l) && ensureEligible(l).dfo; }));
-              var tsoFit = sortTso(covering.filter(function (l) { return tsoOk(l) && startFitsBand(l, bandStart); }));
-              var tsoAny = sortTso(covering.filter(tsoOk));
-              function takeT(arr, fn) {
-                for (var i = 0; i < arr.length && defT > 0; i++) {
-                  if (setDuty(arr[i].id, d, fn)) { defT--; changed = true; }
-                }
-              }
-              takeT(tsoBag, "BAG"); takeT(tsoDfo, "DFO"); takeT(tsoFit, "DFO"); takeT(tsoAny, "DFO");
+              function tsoOk(l) { return S.lineRoleKey(l) === "TSO" && candOk(l, d, bandStart, allowOvershoot); }
+              function takeT(arr, fn) { for (var i = 0; i < arr.length && defT > 0; i++) { if (setDuty(arr[i].id, d, fn)) { defT--; changed = true; } } }
+              takeT(sortTso(covering.filter(function (l) { return tsoOk(l) && ensureEligible(l).bag; })), "BAG");
+              takeT(sortTso(covering.filter(function (l) { return tsoOk(l) && ensureEligible(l).dfo; })), "DFO");
+              takeT(sortTso(covering.filter(function (l) { return tsoOk(l) && S.lineStartMin(l) >= bandStart - 5; })), "DFO");
+              takeT(sortTso(covering.filter(tsoOk)), "DFO");
             }
           }
         }
       });
     }
+    for (var d = 0; d < days; d++) { fillBandsForDay(d, false); fillBandsForDay(d, true); }
     var shortfalls = [];
     for (var d2 = 0; d2 < Math.min(7, days); d2++) {
       (fc.bands || []).forEach(function (band) {
@@ -384,48 +311,38 @@ window.Scheduler = window.Scheduler || {};
         if (worst.STSO < needS) miss.push("STSO " + worst.STSO + "/" + needS);
         if (worst.LTSO < needL) miss.push("LTSO " + worst.LTSO + "/" + needL);
         if (worst.TSO < needT) miss.push("TSO " + worst.TSO + "/" + needT);
-        if (miss.length) shortfalls.push((S.DAYS[d2 % 7] || d2) + " " + band.start + "\u2013" + band.end + ": " + miss.join(", "));
+        if (miss.length) shortfalls.push((S.DAYS[d2 % 7] || d2) + " " + band.start + "-" + band.end + ": " + miss.join(", "));
       });
     }
     if (S.renderLines) S.renderLines();
     if (S.renderCoverageBars) S.renderCoverageBars();
     if (S.renderReports) S.renderReports();
-    var msg = "DFO pools STSO " + poolStats.stso.total + " \u00b7 LTSO " + poolStats.ltso.total + " \u00b7 TSO " + poolStats.tso.total + " \u00b7 BAG " + poolStats.bag.total;
+    var msg = "DFO pools STSO " + poolStats.stso.total + " LTSO " + poolStats.ltso.total + " TSO " + poolStats.tso.total + " BAG " + poolStats.bag.total;
     if (shortfalls.length) {
-      msg += " \u00b7 SHORT " + shortfalls.length + " day/band(s) \u2014 check pool size / who works those windows";
-      if (S.state.issues) {
-        shortfalls.slice(0, 10).forEach(function (s) { S.state.issues.push("DFO band: " + s); });
-        if (S.renderIssues) S.renderIssues();
-      }
-    } else msg += " \u00b7 all band minimums met every day across each window";
-    var hint = S.$("cert-assign-hint");
-    if (hint) hint.textContent = msg;
+      msg += " SHORT " + shortfalls.length + " day/band(s)";
+      if (S.state.issues) { shortfalls.slice(0, 10).forEach(function (s) { S.state.issues.push("DFO band: " + s); }); if (S.renderIssues) S.renderIssues(); }
+    } else msg += " all band minimums met";
+    var hint = S.$("cert-assign-hint"); if (hint) hint.textContent = msg;
     if (S.updateStatus) S.updateStatus(msg);
     S.closeFunctionCoverageModal();
   };
-
   S.clearLineFunctions = function () {
     (S.state.lines || []).forEach(function (l) { l.function = ""; l.functionEligible = { dfo: false, bag: false, pax: false }; });
     S.state.functionRotation = {};
   };
-
   S.initFunctionCoverage = function () {
     if (S._funcCoverageBound) return;
     S._funcCoverageBound = true;
     S.ensureFunctionCoverage();
-    var openBtn = S.$("btn-open-func-coverage");
-    if (openBtn) openBtn.addEventListener("click", S.openFunctionCoverageModal);
-    var closeBtn = S.$("func-coverage-close");
-    if (closeBtn) closeBtn.addEventListener("click", S.closeFunctionCoverageModal);
-    var cancelBtn = S.$("fc-cancel");
-    if (cancelBtn) cancelBtn.addEventListener("click", S.closeFunctionCoverageModal);
+    var openBtn = S.$("btn-open-func-coverage"); if (openBtn) openBtn.addEventListener("click", S.openFunctionCoverageModal);
+    var closeBtn = S.$("func-coverage-close"); if (closeBtn) closeBtn.addEventListener("click", S.closeFunctionCoverageModal);
+    var cancelBtn = S.$("fc-cancel"); if (cancelBtn) cancelBtn.addEventListener("click", S.closeFunctionCoverageModal);
     var saveBtn = S.$("fc-save");
     if (saveBtn) saveBtn.addEventListener("click", function () {
       S.readFunctionBandsFromDom(); S.renderFunctionBandsTable(); S.updateFunctionCoveragePreview();
       if (S.updateStatus) S.updateStatus("Function coverage settings saved.");
     });
-    var genBtn = S.$("fc-generate");
-    if (genBtn) genBtn.addEventListener("click", S.generateFunctionAssignments);
+    var genBtn = S.$("fc-generate"); if (genBtn) genBtn.addEventListener("click", S.generateFunctionAssignments);
     var addBtn = S.$("fc-add-band");
     if (addBtn) addBtn.addEventListener("click", function () {
       S.readFunctionBandsFromDom();
@@ -433,17 +350,14 @@ window.Scheduler = window.Scheduler || {};
       S.renderFunctionBandsTable(); S.updateFunctionCoveragePreview();
     });
     document.addEventListener("click", function (e) {
-      var t = e.target;
-      if (!t || !t.getAttribute) return;
-      var rm = t.getAttribute("data-fc-remove");
-      if (rm == null) return;
+      var t = e.target; if (!t || !t.getAttribute) return;
+      var rm = t.getAttribute("data-fc-remove"); if (rm == null) return;
       S.readFunctionBandsFromDom();
       var idx = +rm, bands = S.ensureFunctionCoverage().bands;
       if (idx >= 0 && idx < bands.length) { bands.splice(idx, 1); S.renderFunctionBandsTable(); S.updateFunctionCoveragePreview(); }
     });
     document.addEventListener("change", function (e) {
-      var t = e.target;
-      if (!t) return;
+      var t = e.target; if (!t) return;
       if ((t.getAttribute && t.getAttribute("data-fc-band") != null) || (t.id && t.id.indexOf("fc-") === 0)) {
         S.readFunctionBandsFromDom(); S.updateFunctionCoveragePreview();
       }
