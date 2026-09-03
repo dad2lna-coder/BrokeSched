@@ -343,7 +343,6 @@ select:focus {
 
 .cov-matrix td.hc-low { color: var(--amber); }
 .cov-matrix td.hc-ok { color: var(--green); }
-
 .cov-matrix td.hc-high {
   color: var(--blue);
   font-weight: 700;
@@ -442,6 +441,7 @@ select:focus {
 }
 
 .modal-tab-btn:hover { background: var(--panel2); }
+
 .modal-tab-btn.active {
   color: var(--text);
   background: var(--panel2);
@@ -494,6 +494,7 @@ select:focus {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem 1rem;
 }
+
 .grid-4 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -505,18 +506,21 @@ select:focus {
   margin-top: 0.5rem;
   border-left: 2px solid var(--border);
 }
+
 /* ===== Team forming ===== */
 .team-pool {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
+
 .team-role-group {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
   overflow: hidden;
 }
+
 .team-role-title {
   font-weight: 700;
   font-size: 0.8rem;
@@ -524,6 +528,7 @@ select:focus {
   background: var(--panel2);
   border-bottom: 1px solid var(--border);
 }
+
 .team-role-list {
   display: flex;
   flex-direction: column;
@@ -531,6 +536,7 @@ select:focus {
   padding: 0.5rem;
   min-height: 2.5rem;
 }
+
 .team-line {
   display: flex;
   align-items: center;
@@ -543,7 +549,9 @@ select:focus {
   font-size: 0.78rem;
   cursor: grab;
 }
+
 .team-line:active { cursor: grabbing; }
+
 .team-line-code { font-weight: 700; font-family: var(--mono); }
 .team-line .badge { font-size: 0.68rem; }
 
@@ -552,6 +560,7 @@ select:focus {
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
 }
+
 .team-board {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -560,6 +569,7 @@ select:focus {
   flex-direction: column;
   min-height: 8rem;
 }
+
 .team-board-head {
   display: flex;
   align-items: center;
@@ -569,6 +579,7 @@ select:focus {
   background: var(--panel2);
   border-radius: 10px 10px 0 0;
 }
+
 .team-name-input {
   flex: 1;
   min-width: 0;
@@ -580,6 +591,7 @@ select:focus {
   font: inherit;
   font-weight: 700;
 }
+
 .team-board-list {
   display: flex;
   flex-direction: column;
@@ -588,8 +600,11 @@ select:focus {
   min-height: 4rem;
   flex: 1;
 }
+
 .team-board-list .team-line { background: var(--bg); }
+
 .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+
 .sortable-ghost { opacity: 0.4; }
 .sortable-chosen { box-shadow: 0 0 0 2px var(--amber); }
 .sortable-drag { opacity: 0.9; }
@@ -798,26 +813,21 @@ select {
   .grid-4 {
     grid-template-columns: 1fr 1fr;
   }
-
   .topbar {
     padding: 0.65rem 0.85rem;
   }
-
   .tabs {
     padding: 0.4rem 0.75rem;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     flex-wrap: nowrap;
   }
-
   .tab-btn {
     flex-shrink: 0;
   }
-
   .panel {
     padding: 0.75rem;
   }
-
   .modal-content {
     width: 96%;
     margin: 3% auto;
@@ -825,11 +835,9 @@ select {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
-
   .data-table {
     font-size: 0.9rem;
   }
-
   .data-table input[type="time"],
   .data-table input[type="number"],
   .data-table input[type="text"] {
@@ -843,16 +851,13 @@ select {
   .grid-4 {
     grid-template-columns: 1fr;
   }
-
   .brand {
     font-size: 0.95rem;
   }
-
   .btn,
   .tab-btn {
     padding: 0.55rem 0.75rem;
   }
-
   .cov-matrix th,
   .cov-matrix td {
     padding: 0.45rem 0.3rem;
@@ -1236,17 +1241,17 @@ body.team-follow-active #tab-teams {
   /* intentionally empty: panels are position:fixed overlays */
 }
 
-
-
 /* Function duty colors: BAG light red, DFO yellow */
 .cell-function-duty {
   font-weight: 600;
 }
+
 .cell-function-duty.cell-bag {
   background: #f4b4b4 !important;
   color: #111 !important;
   box-shadow: inset 0 0 0 1px #c07070;
 }
+
 .cell-function-duty.cell-dfo {
   background: #ffc000 !important;
   color: #111 !important;
@@ -1264,24 +1269,26 @@ body.team-follow-active #tab-teams {
   font-size: 0.78rem;
 }
 
-
 .rpt-role {
   display: block;
   white-space: nowrap;
   font-size: 0.72rem;
   line-height: 1.25;
 }
+
 .rpt-role-lbl {
   display: inline-block;
   min-width: 2.4rem;
   color: var(--muted);
   font-weight: 600;
 }
+
 .rpt-table td {
   vertical-align: top;
   font-size: 0.78rem;
   min-width: 5.5rem;
 }
+
 .rpt-table th {
   white-space: nowrap;
 }
@@ -1296,4 +1303,23 @@ body.team-follow-active #tab-teams {
   border: 1px solid var(--border);
   color: var(--muted);
   white-space: nowrap;
+}
+
+/* --- ADDED: Instructions Modal Styles --- */
+.instructions-container {
+  max-height: 70vh;
+  overflow-y: auto;
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1rem;
+  border-radius: 6px;
+  line-height: 1.5;
+}
+
+.instructions-container pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
 }
