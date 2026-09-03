@@ -247,6 +247,35 @@ window.Scheduler = window.Scheduler || {};
     return "FT";
   }
 
+  function teamMetaForExport(lineId) {
+    if (S.teams && Array.isArray(S.teams.teams)) {
+      var wantNum = +lineId;
+      var wantStr = String(lineId);
+      for (var i = 0; i < S.teams.teams.length; i++) {
+        var t = S.teams.teams[i];
+        var members = t.members || [];
+        for (var j = 0; j < members.length; j++) {
+          if (+members[j] === wantNum || String(members[j]) === wantStr) {
+            return { order: i, name: t.name || t.id, id: t.id };
+          }
+        }
+      }
+    }
+    if (S.teamMetaForLine) return S.teamMetaForLine(lineId);
+    return { order: 9999, name: "", id: "" };
+  }
+
+  function padTeamName(name) {
+    var raw = String(name || "").trim();
+    if (!raw) return "";
+    var m = raw.match(/^(\d+)$/);
+    if (m) {
+      var n = parseInt(m[1], 10);
+      return n < 10 ? "0" + n : String(n);
+    }
+    return raw;
+  }
+
   function teamNumberKey(teamMeta) {
     if (!teamMeta || !teamMeta.id) return 9999;
     var name = String(teamMeta.name || "");
@@ -265,8 +294,8 @@ window.Scheduler = window.Scheduler || {};
 
   function sortLinesForExcel(lines) {
     return lines.slice().sort(function (a, b) {
-      var ta = S.teamMetaForLine ? S.teamMetaForLine(a.id) : { name: "", order: 9999, id: "" };
-      var tb = S.teamMetaForLine ? S.teamMetaForLine(b.id) : { name: "", order: 9999, id: "" };
+      var ta = teamMetaForExport(a.id);
+      var tb = teamMetaForExport(b.id);
       var ka = teamNumberKey(ta);
       var kb = teamNumberKey(tb);
       if (ka !== kb) return ka - kb;
@@ -303,12 +332,14 @@ window.Scheduler = window.Scheduler || {};
     workbook.created = new Date();
     workbook.views = [{ x: 0, y: 0, width: 20000, height: 15000, firstSheet: 0, activeTab: 0, visibility: "visible" }];
     var sheet = workbook.addWorksheet("Lines");
+    sheet.properties.outlineLevelRow = 1;
 
     var tableRows = [];
     var rowMeta = [];
 
     lines.forEach(function (line) {
-      var teamMeta = S.teamMetaForLine ? S.teamMetaForLine(line.id) : { name: "" };
+      var teamMeta = teamMetaForExport(line.id);
+      var teamName = padTeamName(teamMeta.name || "");
       var sh = S.getShift ? S.getShift(line.shiftId) : null;
       var rdo = S.rdoTextForLine ? S.rdoTextForLine(line) : (line.rdoDays || []).join(",");
       var hours = 0;
@@ -329,7 +360,7 @@ window.Scheduler = window.Scheduler || {};
       }
 
       tableRows.push([
-        teamMeta.name || "",
+        teamName,
         line.lineCode || "",
         line.shiftName || (sh && sh.name) || line.shiftId || "",
         sh ? sh.start : "",
@@ -341,7 +372,7 @@ window.Scheduler = window.Scheduler || {};
         rdo,
         line.paid || ""
       ].concat(dayValues, [hours]));
-      rowMeta.push(dayFlags);
+      rowMeta.push({ days: dayFlags, teamKey: teamName || "__none__" });
     });
 
     sheet.addRow(headers);
@@ -371,8 +402,10 @@ window.Scheduler = window.Scheduler || {};
     for (var r = 2; r <= lastRow; r++) {
       var row = sheet.getRow(r);
       row.height = 18;
+      row.outlineLevel = 1;
       var stripe = (r % 2 === 0) ? zebraLight : zebraGrey;
-      var flags = rowMeta[r - 2] || [];
+      var meta = rowMeta[r - 2] || {};
+      var flags = meta.days || [];
       for (var col = 1; col <= lastCol; col++) {
         var cell = row.getCell(col);
         var dayOffset = col - (metaHeaders.length + 1);
