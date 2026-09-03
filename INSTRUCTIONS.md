@@ -42,9 +42,9 @@ After the initial schedule is generated:
 
 ### 2.1 Assign Function Coverage
 Select coverage requirements for each function:
-- **Pax** (Passenger Processing)
-- **Bag** (Baggage Screening)
-- **DFO** (Duties Function Officer)
+- **Pax** (Passenger)
+- **Bag** (Baggage)
+- **DFO** (Dual Function Officer)
 
 **Note:** Bag and DFO are interchangeable in your staffing model.
 
@@ -132,7 +132,7 @@ The pick list contains staff that don't fit standard RDO patterns:
 ### 6.2 Export to Excel
 - Click the **Export to Excel** button
 - Your complete schedule exports with all assignments and RDO patterns
-- **Future Enhancement:** Final formats will include smart upload capabilities for direct system integration
+- **Future Enhancement:** Final formats will include SMART Schedule Upload generation capabilities
 
 ---
 
@@ -143,7 +143,7 @@ Each line displays:
 - **Employee identifier**
 - **RDO pattern** (days off per week/schedule period)
 - **Work schedule** across the planning period
-- **Functional assignments** (Pax, Bag, DFO)
+- **Functional assignments** (Pax, Bag, DFO) Cells will be color coded for BAG or DFO
 - **Shift times** for each scheduled day
 
 ### 7.2 Verify Before Export
