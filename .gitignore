@@ -1,0 +1,8 @@
+node_modules/
+src-tauri/target/
+src-tauri/gen/
+dist-frontend/
+*.exe
+*.msi
+*.AppImage
+.DS_Store

@@ -1,0 +1,45 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "src-tauri/**"
+      - "index.html"
+      - "js/**"
+      - "css/**"
+      - "lib/**"
+      - "package.json"
+      - ".github/workflows/build-windows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Decode app icons
+        run: node scripts/decode-icons.js
+
+      - name: Install frontend deps
+        run: npm install
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: brokesched-v__VERSION__
+          releaseName: "BrokeSched v__VERSION__"
+          releaseBody: "Windows installer built from main. Unsigned — SmartScreen may warn on first run."
+          releaseDraft: true
+          prerelease: false
+          args: --bundles nsis

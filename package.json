@@ -1,0 +1,15 @@
+{
+  "name": "brokesched",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Offline airport staffing scheduler (TSO / LTSO / STSO)",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:win": "tauri build --bundles nsis"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
