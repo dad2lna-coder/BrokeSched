@@ -1238,11 +1238,19 @@ body.team-follow-active #tab-teams {
 
 
 
-/* Function duty day highlight (shared color for DFO/BAG/PAX) */
+/* Function duty colors: BAG light red, DFO yellow */
 .cell-function-duty {
-  background: rgba(180, 120, 40, 0.35) !important;
-  box-shadow: inset 0 0 0 1px var(--amber);
   font-weight: 600;
+}
+.cell-function-duty.cell-bag {
+  background: #f4b4b4 !important;
+  color: #111 !important;
+  box-shadow: inset 0 0 0 1px #c07070;
+}
+.cell-function-duty.cell-dfo {
+  background: #ffc000 !important;
+  color: #111 !important;
+  box-shadow: inset 0 0 0 1px #c49200;
 }
 
 .rpt-role {
