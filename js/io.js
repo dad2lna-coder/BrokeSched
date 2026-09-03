@@ -71,7 +71,8 @@ window.Scheduler = window.Scheduler || {};
       },
       results: {
         lines: S.state.lines, schedule: S.state.schedule,
-        mode: S.state.mode, issues: S.state.issues
+        mode: S.state.mode, issues: S.state.issues,
+        functionRotation: S.state.functionRotation || {}
       }
     };
     var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -123,6 +124,9 @@ window.Scheduler = window.Scheduler || {};
       : [];
     S.state.lines = importedLines;
     S.state.schedule = normalizeSchedule(results.schedule, S.state.lines.map(function (l) { return l.id; }));
+    S.state.functionRotation = results.functionRotation && typeof results.functionRotation === "object"
+      ? results.functionRotation
+      : {};
     S.state.mode = typeof results.mode === "string" ? results.mode : "imported";
     S.state.issues = Array.isArray(results.issues) ? results.issues.map(String) : [];
 
@@ -179,13 +183,14 @@ window.Scheduler = window.Scheduler || {};
     S.state.lines = [];
     S.state.schedule = {};
     S.state.issues = [];
+    S.state.functionRotation = {};
     S.state.mode = "—";
     S.renderAll();
     S.updateStatus("Cleared results. Configuration remains.");
   };
 
   function loadScript(src, cb) {
-    var existing = document.querySelector('script[src="' + src + '"]');
+    var existing = document.querySelector('script[src^="lib/exceljs.min.js"]');
     if (existing && typeof ExcelJS !== "undefined") {
       cb();
       return;
@@ -287,15 +292,8 @@ window.Scheduler = window.Scheduler || {};
       rowMeta.push(dayFlags);
     });
 
-    sheet.addTable({
-      name: "BidLines",
-      ref: "A1",
-      headerRow: true,
-      totalsRow: false,
-      style: { theme: "TableStyleMedium2", showRowStripes: true },
-      columns: headers.map(function (h) { return { name: h, filterButton: true }; }),
-      rows: tableRows
-    });
+    sheet.addRow(headers);
+    tableRows.forEach(function (r) { sheet.addRow(r); });
 
     var lastCol = headers.length;
     var lastRow = tableRows.length + 1;
@@ -363,7 +361,7 @@ window.Scheduler = window.Scheduler || {};
       paperSize: 9
     };
 
-    workbook.xlsx.writeBuffer().then(function (buffer) {
+    return workbook.xlsx.writeBuffer().then(function (buffer) {
       var blob = new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       });
@@ -376,23 +374,35 @@ window.Scheduler = window.Scheduler || {};
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       if (S.updateStatus) S.updateStatus("Exported styled Excel (.xlsx) lines table.");
-    }).catch(function (err) {
-      console.error("Error generating Excel file:", err);
-      if (S.updateStatus) S.updateStatus("Failed to export Excel.");
     });
   }
 
   S.exportLinesExcel = function () {
     var lines = S.state.lines || [];
     if (!lines.length) {
-      if (S.updateStatus) S.updateStatus("No lines to export.");
+      if (S.updateStatus) S.updateStatus("No lines to export. Generate first.");
       return;
     }
-    if (S.updateStatus) S.updateStatus("Preparing Excel export...");
+    if (S.updateStatus) S.updateStatus("Preparing Excel (.xlsx) export...");
+    function run() {
+      try {
+        if (typeof ExcelJS === "undefined") throw new Error("ExcelJS not loaded");
+        var p = generateAndDownloadXlsx();
+        if (p && p.catch) {
+          p.catch(function (err) {
+            console.error(err);
+            if (S.updateStatus) S.updateStatus("Excel export failed: " + (err && err.message ? err.message : err));
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        if (S.updateStatus) S.updateStatus("Excel export failed: " + (err && err.message ? err.message : err));
+      }
+    }
     if (typeof ExcelJS === "undefined") {
-      loadScript("lib/exceljs.min.js", generateAndDownloadXlsx);
+      loadScript("lib/exceljs.min.js?v=20260902h", run);
     } else {
-      generateAndDownloadXlsx();
+      run();
     }
   };
 })(window.Scheduler);
