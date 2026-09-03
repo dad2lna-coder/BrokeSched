@@ -9,6 +9,14 @@ window.Scheduler = window.Scheduler || {};
     return line.function || null;
   }
 
+  function workLabel(line) {
+    if (line.shiftLabel) return line.shiftLabel;
+    var sh = S.getShift ? S.getShift(line.shiftId) : null;
+    if (sh && sh.start && sh.end) return sh.start + "–" + sh.end;
+    if (sh && sh.start) return sh.start;
+    return "WORK";
+  }
+
   function applyBagDutyToWorkDays(line) {
     if (!line || line.function !== "BAG") return;
     if (!S.state.functionRotation) S.state.functionRotation = {};
@@ -68,18 +76,11 @@ window.Scheduler = window.Scheduler || {};
       var isBag = duty === "BAG" || duty === "BAGS" || duty === "baggage";
       var isDfo = duty === "DFO";
       var extra = "";
-      var label = line.shiftLabel || "WORK";
-      if (isBag) {
-        extra = " cell-function-duty cell-bag";
-        label = "BAG";
-      } else if (isDfo) {
-        extra = " cell-function-duty cell-dfo";
-        label = "DFO";
-      } else if (duty) {
-        extra = " cell-function-duty";
-      }
+      if (isBag) extra = " cell-function-duty cell-bag";
+      else if (isDfo) extra = " cell-function-duty cell-dfo";
+      else if (duty) extra = " cell-function-duty";
       cell.className = "cell-work cell-toggle" + extra;
-      cell.textContent = label;
+      cell.textContent = workLabel(line);
     });
   }
 
