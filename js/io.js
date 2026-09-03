@@ -234,16 +234,66 @@ window.Scheduler = window.Scheduler || {};
     return "WORK";
   }
 
+  function exportPosition(line) {
+    if (line.isStso || line.empClass === "STSO") return "STSO";
+    if (line.isLtso || line.empClass === "LTSO") return "LTSO";
+    return "TSO";
+  }
+
+  function exportEmpClass(line) {
+    var pos = exportPosition(line);
+    if (pos === "STSO" || pos === "LTSO") return "FT";
+    if (line.empClass === "PT") return "PT";
+    return "FT";
+  }
+
+  function teamNumberKey(teamMeta) {
+    if (!teamMeta || !teamMeta.id) return 9999;
+    var name = String(teamMeta.name || "");
+    var m = name.match(/(\d+)/);
+    if (m) return parseInt(m[1], 10);
+    if (teamMeta.order != null && teamMeta.order < 9999) return teamMeta.order;
+    return 9999;
+  }
+
+  function roleSortKey(line) {
+    var p = exportPosition(line);
+    if (p === "STSO") return 0;
+    if (p === "LTSO") return 1;
+    return 2;
+  }
+
+  function sortLinesForExcel(lines) {
+    return lines.slice().sort(function (a, b) {
+      var ta = S.teamMetaForLine ? S.teamMetaForLine(a.id) : { name: "", order: 9999, id: "" };
+      var tb = S.teamMetaForLine ? S.teamMetaForLine(b.id) : { name: "", order: 9999, id: "" };
+      var ka = teamNumberKey(ta);
+      var kb = teamNumberKey(tb);
+      if (ka !== kb) return ka - kb;
+      var ra = roleSortKey(a);
+      var rb = roleSortKey(b);
+      if (ra !== rb) return ra - rb;
+      var sa = S.getShift ? S.getShift(a.shiftId) : null;
+      var sb = S.getShift ? S.getShift(b.shiftId) : null;
+      var sma = sa && S.timeToMin ? S.timeToMin(sa.start) : 0;
+      var smb = sb && S.timeToMin ? S.timeToMin(sb.start) : 0;
+      if (sma !== smb) return sma - smb;
+      return String(a.lineCode || a.id).localeCompare(String(b.lineCode || b.id), undefined, { numeric: true });
+    });
+  }
+
   function generateAndDownloadXlsx() {
     var lines = S.state.lines || [];
     if (!lines.length) {
       if (S.updateStatus) S.updateStatus("No lines to export.");
       return;
     }
+    if (S.collectTeamPool) S.collectTeamPool();
+    lines = sortLinesForExcel(lines);
 
     var days = 7;
     var dayNames = S.DAYS || ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    var metaHeaders = ["Team", "Line", "Shift", "Start", "End", "Emp", "Sex", "Function", "RDOs", "Paid"];
+    var metaHeaders = ["Team", "Line", "Shift", "Start", "End", "Position", "Emp", "Sex", "Function", "RDOs", "Paid"];
     var headers = metaHeaders.slice();
     for (var d = 0; d < days; d++) headers.push(dayNames[d]);
     headers.push("Hours");
@@ -284,7 +334,8 @@ window.Scheduler = window.Scheduler || {};
         line.shiftName || (sh && sh.name) || line.shiftId || "",
         sh ? sh.start : "",
         sh ? sh.end : "",
-        line.empClass || "",
+        exportPosition(line),
+        exportEmpClass(line),
         line.sex || "",
         line.function || "",
         rdo,
@@ -344,9 +395,11 @@ window.Scheduler = window.Scheduler || {};
     sheet.columns.forEach(function (col, idx) {
       var header = headers[idx] || "";
       var width = 10;
-      if (header === "Team") width = 14;
+      if (header === "Team") width = 10;
       else if (header === "Line") width = 12;
       else if (header === "Shift") width = 12;
+      else if (header === "Position") width = 10;
+      else if (header === "Emp") width = 8;
       else if (header === "Function") width = 12;
       else if (header === "RDOs") width = 14;
       else if (dayNames.indexOf(header) !== -1) width = 8;
@@ -367,7 +420,6 @@ window.Scheduler = window.Scheduler || {};
       printTitlesRow: "1:1"
     };
 
-    // Apply freeze last so autoFilter / pageSetup cannot drop it.
     sheet.views = [{
       state: "frozen",
       xSplit: 0,
