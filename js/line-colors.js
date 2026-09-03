@@ -1,4 +1,4 @@
-/** Paint RDO blue / BAG yellow on the Lines tab */
+/** Paint RDO blue / BAG light red / DFO yellow on the Lines tab */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -22,13 +22,25 @@ window.Scheduler = window.Scheduler || {};
     }
   }
 
+  function applyDfoDutyToWorkDays(line) {
+    if (!line || line.function !== "DFO") return;
+    if (!S.state.functionRotation) S.state.functionRotation = {};
+    var key = String(line.id);
+    if (!S.state.functionRotation[key]) S.state.functionRotation[key] = [];
+    var sched = S.state.schedule[line.id] || S.state.schedule[key] || [];
+    var days = Math.max(sched.length, (S.state.weekCount || 1) * 7);
+    for (var i = 0; i < days; i++) {
+      while (S.state.functionRotation[key].length <= i) S.state.functionRotation[key].push(null);
+      if (sched[i] === "WORK") S.state.functionRotation[key][i] = "DFO";
+    }
+  }
+
   function fixDayHeaders() {
     var thead = document.getElementById("lines-thead");
     if (!thead) return;
     var ths = thead.querySelectorAll("th");
     if (!ths.length) return;
     var names = S.DAYS || ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    // Last th is Hours; first 7 are Team, Line, Shift, Emp, Sex, Function, RDOs
     var start = 7;
     var end = ths.length - 1;
     var di = 0;
@@ -53,9 +65,21 @@ window.Scheduler = window.Scheduler || {};
         return;
       }
       var duty = dutyFor(line, day);
-      var isBag = duty === "BAG" || duty === "BAGS";
-      cell.className = "cell-work cell-toggle" + (isBag ? " cell-function-duty cell-bag" : (duty ? " cell-function-duty" : ""));
-      cell.textContent = isBag ? "BAG" : (line.shiftLabel || "WORK");
+      var isBag = duty === "BAG" || duty === "BAGS" || duty === "baggage";
+      var isDfo = duty === "DFO";
+      var extra = "";
+      var label = line.shiftLabel || "WORK";
+      if (isBag) {
+        extra = " cell-function-duty cell-bag";
+        label = "BAG";
+      } else if (isDfo) {
+        extra = " cell-function-duty cell-dfo";
+        label = "DFO";
+      } else if (duty) {
+        extra = " cell-function-duty";
+      }
+      cell.className = "cell-work cell-toggle" + extra;
+      cell.textContent = label;
     });
   }
 
@@ -85,6 +109,7 @@ window.Scheduler = window.Scheduler || {};
     var fv = t.value;
     line.function = fv === "DFO" || fv === "PAX" || fv === "BAG" ? fv : "";
     if (line.function === "BAG") applyBagDutyToWorkDays(line);
+    if (line.function === "DFO") applyDfoDutyToWorkDays(line);
     if (S.renderLines) S.renderLines();
     else paintLinesTable();
   });
