@@ -227,6 +227,13 @@ window.Scheduler = window.Scheduler || {};
     return null;
   }
 
+  function workLabelForLine(line, sh) {
+    if (line.shiftLabel) return line.shiftLabel;
+    if (sh && sh.start && sh.end) return sh.start + "–" + sh.end;
+    if (sh && sh.start) return sh.start;
+    return "WORK";
+  }
+
   function generateAndDownloadXlsx() {
     var lines = S.state.lines || [];
     if (!lines.length) {
@@ -258,6 +265,7 @@ window.Scheduler = window.Scheduler || {};
       var hours = 0;
       var dayValues = [];
       var dayFlags = [];
+      var workText = workLabelForLine(line, sh);
       for (var i = 0; i < days; i++) {
         var sched = S.state.schedule[line.id] || S.state.schedule[String(line.id)] || [];
         var st = sched[i] || "RDO";
@@ -265,16 +273,7 @@ window.Scheduler = window.Scheduler || {};
         var duty = isWork ? dayDutyForExport(line, i) : null;
         var isBag = isWork && (duty === "BAG" || duty === "BAGS" || duty === "baggage");
         var isDfo = isWork && duty === "DFO";
-        var label;
-        if (!isWork) {
-          label = "RDO";
-        } else if (isBag) {
-          label = "BAG";
-        } else if (isDfo) {
-          label = "DFO";
-        } else {
-          label = line.shiftLabel || (sh && sh.start) || "WORK";
-        }
+        var label = isWork ? workText : "RDO";
         if (isWork) hours += line.paid || 0;
         dayValues.push(label);
         dayFlags.push({ isRdo: !isWork, isBag: isBag, isDfo: isDfo });
@@ -305,7 +304,7 @@ window.Scheduler = window.Scheduler || {};
     var zebraGrey = "FFEDEDED";
     var rdoFill = "FF2E75B6";
     var bagFill = "FFF4B4B4";
-    var dfoFill = "FFFFC000";
+    var dfoFill = "FFFFF3A8";
 
     var headerRow = sheet.getRow(1);
     headerRow.height = 22;
