@@ -80,6 +80,7 @@ window.Scheduler = window.Scheduler || {};
       '<span class="muted">Total</span><span class="team-total-pill">' + c.total + "</span>" +
       "</div>" +
       '<div class="team-role-row">' + roleBox("STSO") + roleBox("LTSO") + roleBox("TSO") + "</div>" +
+      '<div class="team-summary-drop" data-drop-team="' + t.id + '">Drop lines here</div>' +
       "</div>"
     );
   };
@@ -108,13 +109,11 @@ window.Scheduler = window.Scheduler || {};
       .join("");
     content.innerHTML =
       '<div class="team-line-cols muted"><span></span><span>Role</span><span>Sex</span><span>Hours</span><span>RDO</span><span>FT/PT</span><span></span></div>' +
-      '<div class="team-board-list" data-team-id="' + team.id + '"' +
-      (rows ? "" : ' data-empty="1"') + ">" +
-      (rows || "") +
-      "</div>" +
-      '<p class="muted">Drag unassigned lines from the pool into this list. Use \u2715 to remove.</p>';
+      '<div class="team-edit-list" data-edit-team="' + team.id + '">' +
+      (rows || '<p class="muted">No members yet. Drag from the unassigned pool onto the team card.</p>') +
+      "</div>";
     modal.style.display = "block";
-    if (S.initSortables) S.initSortables();
+    modal.classList.add("is-open");
   };
 
   S.toggleFollowTeam = function (teamId) {
@@ -124,6 +123,29 @@ window.Scheduler = window.Scheduler || {};
     S.teams.buildOpen = true;
     S.renderTeams();
     if (S.updateStatus) S.updateStatus((team.followMe ? "Opened " : "Closed ") + (team.name || team.id));
+  };
+
+  S.addLineToTeamAndRefresh = function (teamId, poolId) {
+    if (!teamId || poolId == null || poolId === "") return false;
+    var ok = S.addMemberToTeam(teamId, poolId);
+    S.renderTeams();
+    if (S.renderLines) S.renderLines();
+    var modal = S.$("team-detail-modal");
+    if (modal && modal.style.display === "block") S.openTeamEditModal(teamId);
+    if (ok && S.updateStatus) {
+      var team = S.getTeamById(teamId);
+      S.updateStatus("Added line to " + ((team && team.name) || teamId));
+    }
+    return ok;
+  };
+
+  S.removeLineFromTeamAndRefresh = function (teamId, poolId) {
+    if (!teamId || poolId == null || poolId === "") return;
+    S.removeMemberFromTeam(teamId, poolId);
+    S.renderTeams();
+    if (S.renderLines) S.renderLines();
+    var modal = S.$("team-detail-modal");
+    if (modal && modal.style.display === "block") S.openTeamEditModal(teamId);
   };
 
   var prevApply = S.applyFollowMe;
@@ -172,29 +194,78 @@ window.Scheduler = window.Scheduler || {};
     }
   };
 
+  var prevInitSort = S.initSortables;
+  S.initSortables = function () {
+    if (typeof prevInitSort === "function") prevInitSort();
+    if (typeof Sortable === "undefined" || typeof Sortable.create !== "function") return;
+    document.querySelectorAll(".team-summary-drop").forEach(function (el) {
+      S.teams.sortables.push(Sortable.create(el, {
+        group: { name: "teams", pull: false, put: true },
+        animation: 150,
+        draggable: ".team-line",
+        filter: "button, input, select, label",
+        preventOnFilter: true,
+        onAdd: function (evt) {
+          var teamId = el.getAttribute("data-drop-team");
+          var item = evt.item;
+          var pid = item && item.getAttribute("data-id");
+          if (item && item.parentNode) item.parentNode.removeChild(item);
+          S.addLineToTeamAndRefresh(teamId, pid);
+        }
+      }));
+    });
+  };
+
+  function handleTeamPointer(e) {
+    var t = e.target;
+    if (!t || !t.closest) return false;
+    var rm = t.closest("[data-remove-member]");
+    if (rm) {
+      e.preventDefault();
+      e.stopPropagation();
+      S.removeLineFromTeamAndRefresh(rm.getAttribute("data-from-team"), rm.getAttribute("data-remove-member"));
+      return true;
+    }
+    if (t.id === "btn-team-build") {
+      S.teams.buildOpen = true;
+      S.applyFollowMe();
+      S.renderTeamStats();
+      if (S.initFloatPanels) S.initFloatPanels();
+      return true;
+    }
+    if (t.id === "btn-build-close") {
+      S.teams.buildOpen = false;
+      if (!(S.teams.teams || []).some(function (tm) { return tm.followMe; })) S.applyFollowMe();
+      return true;
+    }
+    var build = t.closest("[data-build-team]");
+    if (build) {
+      S.toggleFollowTeam(build.getAttribute("data-build-team"));
+      return true;
+    }
+    var edit = t.closest("[data-team-edit]");
+    if (edit) {
+      e.preventDefault();
+      e.stopPropagation();
+      S.openTeamEditModal(edit.getAttribute("data-team-edit"));
+      return true;
+    }
+    if (t.id === "team-detail-close") {
+      var md = S.$("team-detail-modal");
+      if (md) {
+        md.style.display = "none";
+        md.classList.remove("is-open");
+      }
+      return true;
+    }
+    return false;
+  }
+
   if (!S._teamBuildBound) {
     S._teamBuildBound = true;
-    document.addEventListener("click", function (e) {
-      var t = e.target;
-      if (!t) return;
-      if (t.id === "btn-team-build") {
-        S.teams.buildOpen = true;
-        S.applyFollowMe();
-        S.renderTeamStats();
-        if (S.initFloatPanels) S.initFloatPanels();
-      } else if (t.id === "btn-build-close") {
-        S.teams.buildOpen = false;
-        if (!(S.teams.teams || []).some(function (tm) { return tm.followMe; })) S.applyFollowMe();
-      } else if (t.getAttribute && t.getAttribute("data-build-team")) {
-        S.toggleFollowTeam(t.getAttribute("data-build-team"));
-      } else if (t.closest && t.closest("[data-build-team]")) {
-        S.toggleFollowTeam(t.closest("[data-build-team]").getAttribute("data-build-team"));
-      } else if (t.getAttribute && t.getAttribute("data-team-edit")) {
-        S.openTeamEditModal(t.getAttribute("data-team-edit"));
-      } else if (t.id === "team-detail-close") {
-        var md = S.$("team-detail-modal");
-        if (md) md.style.display = "none";
-      }
-    });
+    document.addEventListener("click", handleTeamPointer, true);
+    document.addEventListener("touchend", function (e) {
+      handleTeamPointer(e);
+    }, true);
   }
 })(window.Scheduler);
