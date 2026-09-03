@@ -22,7 +22,23 @@ window.Scheduler = window.Scheduler || {};
     }
   }
 
+  function fixDayHeaders() {
+    var thead = document.getElementById("lines-thead");
+    if (!thead) return;
+    var ths = thead.querySelectorAll("th");
+    if (!ths.length) return;
+    var names = S.DAYS || ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    // Last th is Hours; first 7 are Team, Line, Shift, Emp, Sex, Function, RDOs
+    var start = 7;
+    var end = ths.length - 1;
+    var di = 0;
+    for (var i = start; i < end; i++, di++) {
+      ths[i].textContent = names[di % 7];
+    }
+  }
+
   function paintLinesTable() {
+    fixDayHeaders();
     var tbody = document.getElementById("lines-tbody");
     if (!tbody) return;
     var cells = tbody.querySelectorAll("td.cell-toggle");
@@ -32,20 +48,14 @@ window.Scheduler = window.Scheduler || {};
       if (!line || isNaN(day)) return;
       var sched = (S.state.schedule[line.id] || S.state.schedule[String(line.id)] || [])[day] || "RDO";
       if (sched !== "WORK") {
-        cell.classList.add("cell-rdo");
-        cell.classList.remove("cell-bag", "cell-work", "cell-function-duty");
+        cell.className = "cell-rdo cell-toggle";
         cell.textContent = "RDO";
         return;
       }
       var duty = dutyFor(line, day);
-      cell.classList.remove("cell-rdo");
-      cell.classList.add("cell-work");
-      if (duty === "BAG" || duty === "BAGS") {
-        cell.classList.add("cell-bag", "cell-function-duty");
-        cell.textContent = "BAG";
-      } else {
-        cell.classList.remove("cell-bag");
-      }
+      var isBag = duty === "BAG" || duty === "BAGS";
+      cell.className = "cell-work cell-toggle" + (isBag ? " cell-function-duty cell-bag" : (duty ? " cell-function-duty" : ""));
+      cell.textContent = isBag ? "BAG" : (line.shiftLabel || "WORK");
     });
   }
 
