@@ -251,9 +251,8 @@ window.Scheduler = window.Scheduler || {};
     var workbook = new ExcelJS.Workbook();
     workbook.creator = "BrokeSched";
     workbook.created = new Date();
-    var sheet = workbook.addWorksheet("Lines", {
-      views: [{ state: "frozen", xSplit: 0, ySplit: 1, activeCell: "A2" }]
-    });
+    workbook.views = [{ x: 0, y: 0, width: 20000, height: 15000, firstSheet: 0, activeTab: 0, visibility: "visible" }];
+    var sheet = workbook.addWorksheet("Lines");
 
     var tableRows = [];
     var rowMeta = [];
@@ -364,8 +363,20 @@ window.Scheduler = window.Scheduler || {};
       fitToPage: true,
       fitToWidth: 1,
       fitToHeight: 0,
-      paperSize: 9
+      paperSize: 9,
+      printTitlesRow: "1:1"
     };
+
+    // Apply freeze last so autoFilter / pageSetup cannot drop it.
+    sheet.views = [{
+      state: "frozen",
+      xSplit: 0,
+      ySplit: 1,
+      topLeftCell: "A2",
+      activeCell: "A2",
+      workbookViewId: 0,
+      showGridLines: true
+    }];
 
     return workbook.xlsx.writeBuffer().then(function (buffer) {
       var blob = new Blob([buffer], {
