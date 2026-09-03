@@ -64,13 +64,12 @@ window.Scheduler = window.Scheduler || {};
       );
     }
     return (
-      '<div class="team-summary-card" data-summary-team="' + t.id + '">' +
+      '<div class="team-summary-card" data-summary-team="' + t.id + '" data-drop-team="' + t.id + '">' +
       '<div class="team-summary-top">' +
-      '<div><div class="ts-label">TEAM</div><div class="team-summary-num">' +
+      '<button type="button" class="btn team-edit-btn" data-team-edit="' + t.id + '" title="Edit">\u270e</button>' +
+      '<div class="team-summary-center"><div class="ts-label">TEAM</div><div class="team-summary-num">' +
       String(t.name || t.id).replace(/</g, "<") +
       "</div></div>" +
-      '<div class="team-summary-edit"><div class="ts-label" style="text-align:center">EDIT</div>' +
-      '<button type="button" class="btn" data-team-edit="' + t.id + '">\u270e Edit</button></div>' +
       '<div class="team-summary-phase"><div class="ts-label">PHASE</div>' +
       '<div class="team-phase-pill">' + phaseLbl + "</div></div>" +
       "</div>" +
@@ -80,7 +79,6 @@ window.Scheduler = window.Scheduler || {};
       '<span class="muted">Total</span><span class="team-total-pill">' + c.total + "</span>" +
       "</div>" +
       '<div class="team-role-row">' + roleBox("STSO") + roleBox("LTSO") + roleBox("TSO") + "</div>" +
-      '<div class="team-summary-drop" data-drop-team="' + t.id + '">Drop lines here</div>' +
       "</div>"
     );
   };
@@ -148,8 +146,16 @@ window.Scheduler = window.Scheduler || {};
     if (modal && modal.style.display === "block") S.openTeamEditModal(teamId);
   };
 
+  S.restyleBuilderChrome = function () {
+    var title = document.querySelector("#team-boards-dock .float-panel-head .section-title");
+    if (title) title.textContent = "Team Builder";
+    var newBtn = S.$("btn-team-new-dock");
+    if (newBtn) newBtn.style.display = "none";
+  };
+
   var prevApply = S.applyFollowMe;
   S.applyFollowMe = function () {
+    S.restyleBuilderChrome();
     var following = S.teams.teams.some(function (t) { return !!t.followMe; });
     var open = !!S.teams.buildOpen || following;
     var docks = S.$("team-follow-docks");
@@ -171,6 +177,7 @@ window.Scheduler = window.Scheduler || {};
 
   var prevBoards = S.renderTeamBoards;
   S.renderTeamBoards = function () {
+    S.restyleBuilderChrome();
     if (typeof prevBoards === "function") prevBoards();
     var dock = S.$("team-boards-follow");
     if (!dock) return;
@@ -198,15 +205,15 @@ window.Scheduler = window.Scheduler || {};
   S.initSortables = function () {
     if (typeof prevInitSort === "function") prevInitSort();
     if (typeof Sortable === "undefined" || typeof Sortable.create !== "function") return;
-    document.querySelectorAll(".team-summary-drop").forEach(function (el) {
+    document.querySelectorAll(".team-summary-card").forEach(function (el) {
       S.teams.sortables.push(Sortable.create(el, {
         group: { name: "teams", pull: false, put: true },
-        animation: 150,
+        animation: 120,
         draggable: ".team-line",
         filter: "button, input, select, label",
         preventOnFilter: true,
         onAdd: function (evt) {
-          var teamId = el.getAttribute("data-drop-team");
+          var teamId = el.getAttribute("data-drop-team") || el.getAttribute("data-summary-team");
           var item = evt.item;
           var pid = item && item.getAttribute("data-id");
           if (item && item.parentNode) item.parentNode.removeChild(item);
