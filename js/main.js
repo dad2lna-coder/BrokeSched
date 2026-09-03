@@ -24,22 +24,45 @@ window.Scheduler = window.Scheduler || {};
     const instructionsContent = S.$('instructions-content');
 
     if (instructionsBtn && instructionsModal && instructionsCloseBtn && instructionsContent) {
-      const showInstructions = async () => {
-        try {
-          const response = await fetch('INSTRUCTIONS.md');
-          if (!response.ok) {
-            throw new Error('Could not load INSTRUCTIONS.md. Make sure the file is in the same directory as index.html.');
-          }
-          const markdownText = await response.text();
-          // To preserve formatting, including line breaks, we wrap the text in a <pre> tag.
-          instructionsContent.innerHTML = `<pre>${markdownText}</pre>`;
-          instructionsModal.style.display = 'block';
-        } catch (error) {
-          console.error('Error fetching instructions:', error);
-          instructionsContent.innerHTML = `<p style="color: red;">${error.message}</p>`;
-          instructionsModal.style.display = 'block';
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+
+      function renderInstructions(text) {
+        instructionsContent.innerHTML = "<pre>" + escapeHtml(text) + "</pre>";
+        instructionsModal.style.display = "block";
+      }
+
+      function showInstructions() {
+        if (S.INSTRUCTIONS_MD) {
+          renderInstructions(S.INSTRUCTIONS_MD);
+          return;
         }
-      };
+        // Fallback when served over http:// (local server or GitHub Pages)
+        if (typeof fetch !== "function" || location.protocol === "file:") {
+          renderInstructions(
+            "Instructions file is missing from this copy of the app.\n" +
+              "Keep js/instructions.js next to the other scripts."
+          );
+          return;
+        }
+        fetch("INSTRUCTIONS.md")
+          .then(function (response) {
+            if (!response.ok) throw new Error("Could not load INSTRUCTIONS.md");
+            return response.text();
+          })
+          .then(renderInstructions)
+          .catch(function (error) {
+            console.error("Error fetching instructions:", error);
+            instructionsContent.innerHTML =
+              '<p style="color: red;">Could not load instructions from this folder. ' +
+              "Use the bundled js/instructions.js or open via a local server.</p>";
+            instructionsModal.style.display = "block";
+          });
+      }
 
       const hideInstructions = () => {
         instructionsModal.style.display = 'none';
