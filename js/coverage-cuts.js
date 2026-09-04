@@ -1,4 +1,4 @@
-/** Coverage cuts: fewer matching lines on Generate. Shift times / RDOs / paid hours unchanged. */
+/** Coverage cuts: whole shift + selected weekdays. No mid-shift windows. */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -15,12 +15,6 @@ window.Scheduler = window.Scheduler || {};
     return S.state.coverageCuts;
   }
 
-  function parseMin(t) {
-    if (S.timeToMin) return S.timeToMin(t);
-    var m = String(t || "").match(/^(\d{1,2}):(\d{2})/);
-    return m ? (+m[1]) * 60 + (+m[2]) : 0;
-  }
-
   function lineRole(line) {
     if (S.lineRoleKey) return S.lineRoleKey(line);
     if (line.isStso || line.empClass === "STSO") return "STSO";
@@ -28,69 +22,73 @@ window.Scheduler = window.Scheduler || {};
     return "TSO";
   }
 
-  function lineOverlapsWindow(line, cut) {
-    var days = cut.days && cut.days.length ? cut.days : [0, 1, 2, 3, 4, 5, 6];
-    var wa = parseMin(cut.start || "00:00");
-    var wb = parseMin(cut.end || "23:59");
-    return days.some(function (dow) {
-      if (!S.getShift(line.shiftId)) return false;
-      var times = S.getEffectiveShiftTimes
-        ? S.getEffectiveShiftTimes(line.shiftId, dow)
-        : { start: S.getShift(line.shiftId).start, end: S.getShift(line.shiftId).end };
-      var a = parseMin(times.start);
-      var b = parseMin(times.end);
-      return a < wb && b > wa;
-    });
-  }
-
   function cutMatchesLine(cut, line) {
     if (!cut || !cut.enabled || !line) return false;
+    if (cut.shiftId && line.shiftId !== cut.shiftId) return false;
     var role = lineRole(line);
     if (cut.roles && cut.roles[role] === false) return false;
     var sx = line.sex === "F" ? "F" : "M";
     if (cut.sexes && cut.sexes[sx] === false) return false;
-    if (cut.kind === "shift") return !cut.shiftId || line.shiftId === cut.shiftId;
-    return lineOverlapsWindow(line, cut);
+    return true;
   }
 
-  /** Drop a % of matching lines. Remaining lines keep the same hours and RDOs. */
+  function addUniqueDay(arr, d) {
+    if (arr.indexOf(d) < 0) arr.push(d);
+    return arr;
+  }
+
+  /**
+   * On matching lines, add the selected weekdays as RDOs.
+   * Same shift start/end and paid hours. No new shift times.
+   */
   S.applyCoverageCutsToLines = function () {
-    var cuts = ensureState().filter(function (c) { return c.enabled && +c.pct > 0; });
+    var cuts = ensureState().filter(function (c) {
+      return c.enabled && +c.pct > 0 && c.shiftId && (c.days || []).length;
+    });
     var lines = (S.state && S.state.lines) || [];
     if (!cuts.length || !lines.length) return 0;
-    var drop = {};
+    var touched = 0;
+    var daysN = (S.state.weekCount || 1) * 7;
+    var base = S.state.startDate ? S.state.startDate : (S.parseStartDate ? S.parseStartDate(null) : null);
+
     cuts.forEach(function (cut) {
       var pct = Math.max(0, Math.min(90, +cut.pct || 0));
+      var wantDays = (cut.days || []).map(Number);
       var bucket = {};
       lines.forEach(function (line) {
-        if (drop[line.id]) return;
         if (!cutMatchesLine(cut, line)) return;
-        var key = lineRole(line) + "|" + (line.sex === "F" ? "F" : "M") + "|" + (line.shiftId || "");
+        var key = lineRole(line) + "|" + (line.sex === "F" ? "F" : "M");
         if (!bucket[key]) bucket[key] = [];
         bucket[key].push(line);
       });
       Object.keys(bucket).forEach(function (key) {
-        var group = bucket[key].slice().sort(function (a, b) { return (b.id || 0) - (a.id || 0); });
-        var nDrop = Math.round(group.length * pct / 100);
-        if (nDrop < 1 && pct >= 10 && group.length >= 2) nDrop = 1;
-        group.slice(0, nDrop).forEach(function (line) { drop[line.id] = true; });
+        var group = bucket[key].slice().sort(function (a, b) { return (a.id || 0) - (b.id || 0); });
+        var nTouch = Math.round(group.length * pct / 100);
+        if (nTouch < 1 && pct >= 10 && group.length >= 2) nTouch = 1;
+        group.slice(0, nTouch).forEach(function (line) {
+          var rd = Array.isArray(line.rdoDays) ? line.rdoDays.slice() : [];
+          var before = rd.slice().sort().join(",");
+          wantDays.forEach(function (d) { addUniqueDay(rd, d); });
+          rd.sort(function (a, b) { return a - b; });
+          if (rd.join(",") === before) return;
+          line.rdoDays = rd;
+          if (S.buildScheduleForLine) {
+            S.state.schedule = S.state.schedule || {};
+            S.state.schedule[line.id] = S.buildScheduleForLine(line, daysN);
+          } else if (S.state.schedule && S.state.schedule[line.id] && base && base.add) {
+            for (var off = 0; off < daysN; off++) {
+              var dow = base.add(off, "day").day();
+              if (wantDays.indexOf(dow) >= 0) S.state.schedule[line.id][off] = "RDO";
+            }
+          }
+          touched++;
+        });
       });
     });
-    var kept = lines.filter(function (l) { return !drop[l.id]; });
-    var removed = lines.length - kept.length;
-    if (!removed) return 0;
-    S.state.lines = kept;
-    var days = (S.state.weekCount || 1) * 7;
-    var nextSched = {};
-    kept.forEach(function (line) {
-      if (S.state.schedule && S.state.schedule[line.id]) nextSched[line.id] = S.state.schedule[line.id];
-      else if (S.buildScheduleForLine) nextSched[line.id] = S.buildScheduleForLine(line, days);
-    });
-    S.state.schedule = nextSched;
-    if (S.state.issues) {
-      S.state.issues.push("Coverage cuts removed " + removed + " line(s). Hours/RDOs on remaining lines unchanged.");
+    if (touched && S.state.issues) {
+      S.state.issues.push("Coverage cuts: " + touched + " line(s) given extra RDO day(s). Shift times unchanged.");
     }
-    return removed;
+    return touched;
   };
 
   function injectPanel() {
@@ -101,12 +99,9 @@ window.Scheduler = window.Scheduler || {};
     card.id = "coverage-cuts-card";
     card.innerHTML =
       '<div class="section-title">Coverage cuts</div>' +
-      '<p class="muted">Fine-tune until volume exists. On Generate, matching lines are removed by %. Shift start/end, paid hours, and RDOs on the lines that stay are not changed.</p>' +
+      '<p class="muted">Whole shift + selected days only. Generate gives that % of matching lines those weekdays off. Start/end and paid hours stay the same — no mid-day split shifts.</p>' +
       '<div class="toolbar" style="flex-wrap:wrap;gap:0.5rem;align-items:end" id="coverage-cut-form">' +
-      '<label>Kind <select id="cut-kind"><option value="window">Time window</option><option value="shift">Whole shift</option></select></label>' +
-      '<label id="cut-shift-wrap" style="display:none">Shift <select id="cut-shift"></select></label>' +
-      '<label>From <input type="time" id="cut-start" value="14:00" /></label>' +
-      '<label>To <input type="time" id="cut-end" value="18:00" /></label>' +
+      '<label>Shift <select id="cut-shift"></select></label>' +
       '<label>% drop <input type="number" id="cut-pct" min="5" max="90" step="5" value="20" style="width:4rem" /></label>' +
       '<label class="follow-me-label"><input type="checkbox" id="cut-role-stso" checked /> STSO</label>' +
       '<label class="follow-me-label"><input type="checkbox" id="cut-role-ltso" checked /> LTSO</label>' +
@@ -122,11 +117,8 @@ window.Scheduler = window.Scheduler || {};
     else tab.appendChild(card);
 
     $("cut-days").innerHTML = dayNames().map(function (n, i) {
-      return '<label class="follow-me-label"><input type="checkbox" data-cut-day="' + i + '" checked /> ' + n + "</label>";
+      return '<label class="follow-me-label"><input type="checkbox" data-cut-day="' + i + '" /> ' + n + "</label>";
     }).join("");
-    $("cut-kind").addEventListener("change", function () {
-      $("cut-shift-wrap").style.display = this.value === "shift" ? "" : "none";
-    });
     $("btn-cut-add").addEventListener("click", addCutFromForm);
     document.addEventListener("click", function (e) {
       var t = e.target;
@@ -146,18 +138,23 @@ window.Scheduler = window.Scheduler || {};
   }
 
   function addCutFromForm() {
-    var kind = $("cut-kind").value;
     var days = [];
     document.querySelectorAll("[data-cut-day]").forEach(function (el) {
       if (el.checked) days.push(+el.getAttribute("data-cut-day"));
     });
+    if (!days.length) {
+      if (S.updateStatus) S.updateStatus("Pick at least one day for the cut.");
+      return;
+    }
+    if (!$("cut-shift").value) {
+      if (S.updateStatus) S.updateStatus("Add a shift first.");
+      return;
+    }
     ensureState().push({
       id: uid(),
       enabled: true,
-      kind: kind,
-      shiftId: kind === "shift" ? $("cut-shift").value : "",
-      start: $("cut-start").value || "00:00",
-      end: $("cut-end").value || "23:59",
+      kind: "shift",
+      shiftId: $("cut-shift").value,
       pct: Math.max(5, Math.min(90, +$("cut-pct").value || 20)),
       roles: {
         STSO: !!$("cut-role-stso").checked,
@@ -168,7 +165,7 @@ window.Scheduler = window.Scheduler || {};
       days: days
     });
     renderCutList();
-    if (S.updateStatus) S.updateStatus("Cut saved. Generate again to apply it to line counts.");
+    if (S.updateStatus) S.updateStatus("Cut saved. Generate to apply extra RDOs on those days.");
   }
 
   function removeCut(id) {
@@ -184,19 +181,17 @@ window.Scheduler = window.Scheduler || {};
     if (!box) return;
     var cuts = ensureState();
     if (!cuts.length) {
-      box.innerHTML = "No cuts. Add one, then Generate.";
+      box.innerHTML = "No cuts. Pick a shift and days, then Generate.";
       return;
     }
     box.innerHTML = cuts.map(function (c) {
       var roles = ["STSO", "LTSO", "TSO"].filter(function (r) { return c.roles && c.roles[r]; }).join("/") || "—";
       var sexes = ["M", "F"].filter(function (x) { return c.sexes && c.sexes[x]; }).join("/") || "—";
-      var when = c.kind === "shift"
-        ? ("shift " + ((S.getShift && S.getShift(c.shiftId) && S.getShift(c.shiftId).name) || c.shiftId || "?"))
-        : ((c.start || "?") + "–" + (c.end || "?"));
+      var sh = (S.getShift && S.getShift(c.shiftId) && S.getShift(c.shiftId).name) || c.shiftId || "?";
       var days = (c.days || []).map(function (d) { return dayNames()[d]; }).join(" ");
       return '<div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin:0.25rem 0">' +
         '<button type="button" class="btn" data-cut-toggle="' + c.id + '">' + (c.enabled ? "ON" : "off") + "</button>" +
-        "<span><b>−" + c.pct + "%</b> " + when + " · " + roles + " · " + sexes + " · " + days + "</span>" +
+        "<span><b>−" + c.pct + "%</b> " + sh + " · " + roles + " · " + sexes + " · " + days + "</span>" +
         '<button type="button" class="btn" data-cut-del="' + c.id + '">Remove</button></div>';
     }).join("");
   }
@@ -209,7 +204,7 @@ window.Scheduler = window.Scheduler || {};
       var n = S.applyCoverageCutsToLines();
       if (n && S.renderAll) S.renderAll();
       if (n && S.updateStatus) {
-        S.updateStatus("Coverage cuts removed " + n + " line(s). Hours and RDOs unchanged on what remains.");
+        S.updateStatus("Coverage cuts: " + n + " line(s) extra RDO on selected days. Shift times unchanged.");
       }
       return r;
     };
