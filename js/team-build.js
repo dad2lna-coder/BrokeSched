@@ -68,7 +68,7 @@ window.Scheduler = window.Scheduler || {};
       '<div class="team-summary-top">' +
       '<button type="button" class="btn team-edit-btn" data-team-edit="' + t.id + '" title="Edit">\u270e</button>' +
       '<div class="team-summary-center"><div class="ts-label">TEAM</div><div class="team-summary-num">' +
-      String(t.name || t.id).replace(/</g, "<") +
+      String(t.name || t.id).replace(/</g, "&") +
       "</div></div>" +
       '<div class="team-summary-phase"><div class="ts-label">PHASE</div>' +
       '<div class="team-phase-pill">' + phaseLbl + "</div></div>" +
@@ -274,5 +274,10 @@ window.Scheduler = window.Scheduler || {};
     document.addEventListener("touchend", function (e) {
       handleTeamPointer(e);
     }, true);
+  }
+  if (!document.querySelector('script[src*="team-form-smart"]')) {
+    var smart = document.createElement("script");
+    smart.src = "js/team-form-smart.js?v=20260904e";
+    document.body.appendChild(smart);
   }
 })(window.Scheduler);
