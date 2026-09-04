@@ -27,7 +27,6 @@ window.Scheduler = window.Scheduler || {};
       });
     });
 
-    // --- Instructions Modal Logic ---
     const instructionsModal = S.$('instructions-modal');
     const instructionsBtn = S.$('btn-instructions');
     const instructionsCloseBtn = S.$('instructions-modal-close');
@@ -151,6 +150,7 @@ window.Scheduler = window.Scheduler || {};
     safeInit("functionCoverage", S.initFunctionCoverage);
     safeInit("reports", S.initReports);
     safeInit("linesUI", S.bindLinesUI);
+    safeInit("capacity", S.initCapacity);
 
     function onNewTeam(e) {
       if (e) {
@@ -169,7 +169,7 @@ window.Scheduler = window.Scheduler || {};
       if (btn) btn.addEventListener("click", onNewTeam);
     });
 
-    S.updateStatus("BLADE Alpha Build — boot 20260904d");
+    S.updateStatus("BLADE Alpha Build — boot 20260904f");
     if (S.renderAll) S.renderAll();
   }
 
