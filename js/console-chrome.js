@@ -28,6 +28,11 @@ window.Scheduler = window.Scheduler || {};
     try { localStorage.setItem(LS_AIRPORT, c); } catch (e) {}
     var el = $("console-airport");
     if (el) el.textContent = c || "\u2014";
+    if (c.length === 3) {
+      invoke("ensure_airport_folder", { airport: c }).then(function (p) {
+        if (S.updateStatus) S.updateStatus("Airport folder: " + p);
+      }).catch(function () {});
+    }
     return c;
   };
   S.getOperator = function () {
@@ -64,7 +69,8 @@ window.Scheduler = window.Scheduler || {};
     return blob.arrayBuffer().then(function (buf) {
       return invoke("write_shared_bytes", {
         filename: filename,
-        bytes: Array.from(new Uint8Array(buf))
+        bytes: Array.from(new Uint8Array(buf)),
+        airport: S.getAirportCode() || null
       });
     }).then(function (path) {
       if (S.updateStatus) S.updateStatus("Wrote " + path);
