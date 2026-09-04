@@ -1,4 +1,4 @@
-/** C64 boot intro — airport code (3 letters) then Y/N. */
+/** C64 boot intro — 3-letter airport, operator name, then Y/N. */
 (function () {
   "use strict";
 
@@ -34,6 +34,11 @@
     if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) return true;
     return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
   }
+  function tauriInvoke(cmd) {
+    var core = window.__TAURI__ && window.__TAURI__.core;
+    if (!core || typeof core.invoke !== "function") return Promise.reject(new Error("no-tauri"));
+    return core.invoke(cmd);
+  }
 
   async function typeInto(el, text, speed) {
     el.innerHTML = "";
@@ -45,7 +50,6 @@
       await sleep(text.charAt(i) === "\n" ? speed * 1.6 : speed);
     }
   }
-
   async function drawAscii(el, block, rowDelay) {
     var rows = block.split("\n");
     var shown = [];
@@ -62,23 +66,26 @@
     var c = String(code || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
     if (c.length !== 3) return "";
     if (window.Scheduler && Scheduler.setAirportCode) Scheduler.setAirportCode(c);
-    else {
-      try { localStorage.setItem("blade.airportCode", c); } catch (e) {}
-    }
+    else { try { localStorage.setItem("blade.airportCode", c); } catch (e) {} }
     if (window.Scheduler && Scheduler.refreshConsoleChrome) Scheduler.refreshConsoleChrome();
     return c;
+  }
+  function applyOperator(name) {
+    var n = String(name || "").trim();
+    if (!n) return "";
+    if (window.Scheduler && Scheduler.setOperator) Scheduler.setOperator(n);
+    else { try { localStorage.setItem("blade.operator", n); } catch (e) {} }
+    if (window.Scheduler && Scheduler.refreshConsoleChrome) Scheduler.refreshConsoleChrome();
+    return n;
   }
 
   function dismissIntro() {
     var intro = $("blade-intro");
-    if (intro) {
-      intro.hidden = true;
-      intro.setAttribute("hidden", "");
-    }
+    if (intro) { intro.hidden = true; intro.setAttribute("hidden", ""); }
     window.removeEventListener("keydown", onConfirmKey);
     window.removeEventListener("keydown", onAirportKey);
+    window.removeEventListener("keydown", onOperatorKey);
   }
-
   function shutdownIntro() {
     var greet = $("blade-greet");
     var crt = document.querySelector("#blade-intro .crt");
@@ -86,32 +93,25 @@
     if (crt) crt.style.filter = "brightness(0.15)";
     window.removeEventListener("keydown", onConfirmKey);
     window.removeEventListener("keydown", onAirportKey);
+    window.removeEventListener("keydown", onOperatorKey);
   }
 
   var airportBuf = "";
   var airportDone = false;
+  var operatorBuf = "";
+  var operatorDone = false;
   var greetBase = "";
+  var knownUser = "";
 
   function renderAirportLine() {
     var greet = $("blade-greet");
-    if (!greet) return;
-    greet.innerHTML = greetBase + airportBuf + cursorHtml();
+    if (greet) greet.innerHTML = greetBase + airportBuf + cursorHtml();
   }
-
   function onAirportKey(e) {
     if (airportDone) return;
     var key = e.key || "";
-    if (key === "Backspace") {
-      e.preventDefault();
-      airportBuf = airportBuf.slice(0, -1);
-      renderAirportLine();
-      return;
-    }
-    if (key === "Enter" && airportBuf.length === 3) {
-      e.preventDefault();
-      finishAirport();
-      return;
-    }
+    if (key === "Backspace") { e.preventDefault(); airportBuf = airportBuf.slice(0, -1); renderAirportLine(); return; }
+    if (key === "Enter" && airportBuf.length === 3) { e.preventDefault(); finishAirport(); return; }
     if (/^[a-zA-Z]$/.test(key) && airportBuf.length < 3) {
       e.preventDefault();
       airportBuf += key.toUpperCase();
@@ -119,18 +119,48 @@
       if (airportBuf.length === 3) finishAirport();
     }
   }
-
   function finishAirport() {
     if (airportDone) return;
     var code = applyAirport(airportBuf);
     if (!code) return;
     airportDone = true;
     window.removeEventListener("keydown", onAirportKey);
+    startOperatorPrompt(code);
+  }
+
+  function startOperatorPrompt(code) {
+    greetBase =
+      "\nHELLO, OPERATOR.\nBLADE ALPHA BUILD ONLINE.\n\nAIRPORT LOCKED: " +
+      code +
+      "\nOPERATOR NAME: ";
+    if (knownUser) operatorBuf = knownUser;
+    var greet = $("blade-greet");
+    if (greet) greet.innerHTML = greetBase + operatorBuf + cursorHtml();
+    window.addEventListener("keydown", onOperatorKey);
+  }
+  function onOperatorKey(e) {
+    if (operatorDone) return;
+    var key = e.key || "";
+    if (key === "Backspace") { e.preventDefault(); operatorBuf = operatorBuf.slice(0, -1); startOperatorPrompt(applyAirport(airportBuf)); return; }
+    if (key === "Enter" && operatorBuf.trim().length >= 2) { e.preventDefault(); finishOperator(); return; }
+    if (key.length === 1 && /[A-Za-z0-9._ -]/.test(key) && operatorBuf.length < 24) {
+      e.preventDefault();
+      operatorBuf += key;
+      var greet = $("blade-greet");
+      if (greet) greet.innerHTML = greetBase + operatorBuf + cursorHtml();
+    }
+  }
+  function finishOperator() {
+    if (operatorDone) return;
+    var name = applyOperator(operatorBuf);
+    if (!name) return;
+    operatorDone = true;
+    window.removeEventListener("keydown", onOperatorKey);
     var greet = $("blade-greet");
     if (greet) {
       greet.innerHTML =
-        greetBase + code +
-        "\nAIRPORT LOCKED: " + code +
+        greetBase + name +
+        "\nOPERATOR LOCKED: " + name +
         "\n\nCONTINUE? (Y/N)" + cursorHtml();
     }
     window.addEventListener("keydown", onConfirmKey);
@@ -152,6 +182,11 @@
     intro.hidden = false;
     intro.removeAttribute("hidden");
 
+    try { knownUser = await tauriInvoke("get_operator"); } catch (e) {
+      try { knownUser = localStorage.getItem("blade.operator") || ""; } catch (e2) { knownUser = ""; }
+    }
+    if (knownUser === "OPERATOR") knownUser = "";
+
     await typeInto(term, "READY.\nLOAD \"BID-LINE-GEN\",8,1\n", 32);
     await sleep(280);
     await typeInto(
@@ -165,6 +200,7 @@
     await typeInto(greet, greetBase, 36);
     airportBuf = "";
     airportDone = false;
+    operatorDone = false;
     renderAirportLine();
     window.addEventListener("keydown", onAirportKey);
 
@@ -174,17 +210,17 @@
       if (/^[A-Z]{3}$/.test(last)) {
         airportBuf = last;
         renderAirportLine();
-        await sleep(900);
+        await sleep(600);
         finishAirport();
-        await sleep(1400);
+        if (!operatorBuf) operatorBuf = knownUser || "MOBILE";
+        await sleep(400);
+        finishOperator();
+        await sleep(1200);
         if (!intro.hidden) dismissIntro();
       }
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", runIntro);
-  } else {
-    runIntro();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", runIntro);
+  else runIntro();
 })();

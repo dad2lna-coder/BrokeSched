@@ -1,16 +1,13 @@
-/** Ops-console chrome + airport/operator/export names */
+/** Ops-console chrome + airport/operator + shared-folder export */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
   var LS_AIRPORT = "blade.airportCode";
   var LS_OPERATOR = "blade.operator";
-  var LS_FOLDER = "blade.sharedFolderHint";
-  var SHARED_REL = "OneDrive - USTSA\\Schedule Builder";
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? "0" + n : String(n); }
-
   function fileSafe(name) {
     return String(name || "OPERATOR").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "OPERATOR";
   }
@@ -25,10 +22,7 @@ window.Scheduler = window.Scheduler || {};
     S.state.airportCode = c;
     try { localStorage.setItem(LS_AIRPORT, c); } catch (e) {}
     var el = $("console-airport");
-    if (el) {
-      if (el.tagName === "SELECT" || el.tagName === "INPUT") el.value = c;
-      else el.textContent = c || "—";
-    }
+    if (el) el.textContent = c || "—";
     return c;
   };
   S.getOperator = function () {
@@ -64,53 +58,77 @@ window.Scheduler = window.Scheduler || {};
     return Promise.resolve(S.getOperator());
   };
 
-  S.sharedFolderPath = function () {
-    var user = fileSafe(S.getOperator());
-    if (S.isTauri() && user && user !== "OPERATOR") {
-      return "C:\\Users\\" + user + "\\" + SHARED_REL;
-    }
-    return localStorage.getItem(LS_FOLDER) || "";
+  function blobToBytes(blob) {
+    return blob.arrayBuffer().then(function (buf) {
+      return Array.from(new Uint8Array(buf));
+    });
+  }
+
+  S.writeSharedFile = function (blob, filename) {
+    if (!S.isTauri()) return Promise.resolve(false);
+    return blobToBytes(blob).then(function (bytes) {
+      return window.__TAURI__.core.invoke("write_shared_bytes", {
+        folder: null,
+        filename: filename,
+        bytes: bytes
+      });
+    }).then(function (path) {
+      if (S.updateStatus) S.updateStatus("Wrote " + filename + " \u2192 " + path);
+      return true;
+    }).catch(function (err) {
+      if (S.updateStatus) S.updateStatus("Shared-folder write failed: " + (err && err.toString ? err.toString() : err));
+      return false;
+    });
   };
 
-  var dirHandle = null;
-  S.pickSharedFolder = async function () {
-    if (!window.showDirectoryPicker) {
-      if (S.updateStatus) S.updateStatus("Use Chrome/Edge to link the shared folder, or the Tauri build.");
-      return null;
+  function interceptDownloadClick(runFn) {
+    var proto = HTMLAnchorElement.prototype;
+    var origClick = proto.click;
+    proto.click = function () {
+      var a = this;
+      var name = a.download || "";
+      if (S.exportFileName) {
+        if (/scheduler-pre-v4-export|scheduler.*\.json$/i.test(name)) a.download = S.exportFileName("Config", ".json");
+        else if (/scheduler-lines-|scheduler.*\.xlsx$/i.test(name)) a.download = S.exportFileName("Lines", ".xlsx");
+      }
+      if (S.isTauri() && a.href && a.href.indexOf("blob:") === 0) {
+        fetch(a.href).then(function (r) { return r.blob(); }).then(function (blob) {
+          return S.writeSharedFile(blob, a.download);
+        }).then(function (ok) {
+          if (!ok) origClick.apply(a, []);
+        });
+        return;
+      }
+      return origClick.apply(this, arguments);
+    };
+    try { return runFn(); }
+    finally { proto.click = origClick; }
+  }
+
+  function hookIo() {
+    if (typeof S.exportJson === "function" && !S.exportJson._bladeHooked) {
+      var origJson = S.exportJson;
+      S.exportJson = function () { return interceptDownloadClick(function () { return origJson.apply(S, arguments); }); };
+      S.exportJson._bladeHooked = true;
     }
-    dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
-    try { localStorage.setItem(LS_FOLDER, dirHandle.name || "Schedule Builder"); } catch (e) {}
-    if (S.updateStatus) S.updateStatus("Shared folder linked: " + dirHandle.name);
-    return dirHandle;
-  };
+    if (typeof S.exportLinesExcel === "function" && !S.exportLinesExcel._bladeHooked) {
+      var origX = S.exportLinesExcel;
+      S.exportLinesExcel = function () { return interceptDownloadClick(function () { return origX.apply(S, arguments); }); };
+      S.exportLinesExcel._bladeHooked = true;
+    }
+  }
 
   function tickClock() {
     var now = new Date();
     if ($("console-time")) $("console-time").textContent = pad(now.getHours()) + ":" + pad(now.getMinutes()) + ":" + pad(now.getSeconds());
     if ($("console-date")) $("console-date").textContent = pad(now.getMonth() + 1) + "/" + pad(now.getDate()) + "/" + now.getFullYear();
   }
-
   function staffTotal() {
     var st = S.state || {};
     return (st.ftM || 0) + (st.ftF || 0) + (st.ptM || 0) + (st.ptF || 0) +
       (st.ltsoM || 0) + (st.ltsoF || 0) + (st.stsoM || 0) + (st.stsoF || 0);
   }
-
-  function paintAirport() {
-    var el = $("console-airport");
-    if (!el) return;
-    var code = S.getAirportCode() || "—";
-    if (el.tagName === "SELECT") {
-      var b = document.createElement("b");
-      b.id = "console-airport";
-      b.textContent = code;
-      el.parentNode.replaceChild(b, el);
-      return;
-    }
-    el.textContent = code;
-  }
-
-  function ensureOperator() {
+  function ensureOperatorChip() {
     var airportMeta = $("console-airport") && $("console-airport").closest(".console-meta");
     if (airportMeta && !$("console-operator")) {
       var wrap = document.createElement("div");
@@ -118,30 +136,15 @@ window.Scheduler = window.Scheduler || {};
       wrap.innerHTML = 'OPERATOR: <b id="console-operator">' + S.getOperator() + "</b>";
       airportMeta.parentNode.insertBefore(wrap, airportMeta.nextSibling);
     }
+    if ($("console-airport")) $("console-airport").textContent = S.getAirportCode() || "—";
+    if ($("console-operator")) $("console-operator").textContent = S.getOperator();
   }
-
-  function wrapExports() {
-    var proto = HTMLAnchorElement.prototype;
-    if (proto.click._bladeWrapped) return;
-    var origClick = proto.click;
-    proto.click = function () {
-      var name = this.download || "";
-      if (S.exportFileName) {
-        if (/scheduler-pre-v4-export|scheduler.*\.json$/i.test(name)) this.download = S.exportFileName("Config", ".json");
-        else if (/scheduler-lines-|scheduler.*\.xlsx$/i.test(name)) this.download = S.exportFileName("Lines", ".xlsx");
-      }
-      return origClick.apply(this, arguments);
-    };
-    proto.click._bladeWrapped = true;
-  }
-
   function refreshHeader() {
     var st = S.state || {};
     if ($("console-weeks")) $("console-weeks").textContent = String(st.weekCount || ($("cfg-weeks") && $("cfg-weeks").value) || 1);
     if ($("console-staff")) $("console-staff").textContent = String(staffTotal());
     if ($("console-lines")) $("console-lines").textContent = String((st.lines && st.lines.length) || 0);
-    if ($("console-operator")) $("console-operator").textContent = S.getOperator();
-    paintAirport();
+    ensureOperatorChip();
   }
 
   function init() {
@@ -150,11 +153,15 @@ window.Scheduler = window.Scheduler || {};
     S.state.airportCode = S.getAirportCode();
     tickClock();
     setInterval(tickClock, 1000);
-    wrapExports();
-    paintAirport();
-    ensureOperator();
+    hookIo();
+    setTimeout(hookIo, 0);
     refreshHeader();
     S.detectOperator().then(refreshHeader);
+    if (S.isTauri()) {
+      window.__TAURI__.core.invoke("shared_folder_path").then(function (p) {
+        if (S.updateStatus) S.updateStatus("Share target: " + p);
+      }).catch(function () {});
+    }
     document.addEventListener("keydown", function (e) {
       if (e.defaultPrevented) return;
       var tag = (e.target && e.target.tagName) || "";
