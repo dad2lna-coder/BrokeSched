@@ -1,4 +1,4 @@
-/** C64 boot intro — 3-letter airport then Y/N. Operator is OS-only. */
+/** C64 boot intro. Desktop (Tauri): airport then Y/N. Web/mobile: skip airport and continue. */
 (function () {
   "use strict";
 
@@ -34,10 +34,12 @@
     if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) return true;
     return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || "");
   }
+  function isTauri() {
+    return !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
+  }
   function invoke(cmd, args) {
-    var core = window.__TAURI__ && window.__TAURI__.core;
-    if (core && typeof core.invoke === "function") return core.invoke(cmd, args || {});
-    return Promise.reject(new Error("no-tauri"));
+    if (!isTauri()) return Promise.reject(new Error("no-tauri"));
+    return window.__TAURI__.core.invoke(cmd, args || {});
   }
 
   async function typeInto(el, text, speed) {
@@ -142,7 +144,7 @@
     try {
       operatorName = await invoke("get_operator");
     } catch (e) {
-      operatorName = "OPERATOR";
+      operatorName = isTauri() ? "OPERATOR" : "WEB";
     }
     if (window.Scheduler && Scheduler.setOperator) Scheduler.setOperator(operatorName);
     else { try { localStorage.setItem("blade.operator", operatorName); } catch (e) {} }
@@ -156,6 +158,15 @@
     );
     await drawAscii(art, BLADE, 65);
 
+    if (!isTauri()) {
+      var webMsg =
+        "\nHELLO, OPERATOR.\nBLADE ALPHA BUILD ONLINE.\nWEB CONSOLE — NO AIRPORT LOCK.\n";
+      await typeInto(greet, webMsg, 28);
+      await sleep(isMobile() ? 900 : 700);
+      dismissIntro();
+      return;
+    }
+
     greetBase =
       "\nHELLO, " + operatorName + ".\nBLADE ALPHA BUILD ONLINE.\n\nAIRPORT CODE (3 LETTERS): ";
     await typeInto(greet, greetBase, 36);
@@ -163,19 +174,6 @@
     airportDone = false;
     renderAirportLine();
     window.addEventListener("keydown", onAirportKey);
-
-    if (isMobile()) {
-      var last = "";
-      try { last = localStorage.getItem("blade.airportCode") || ""; } catch (e) {}
-      if (/^[A-Z]{3}$/.test(last)) {
-        airportBuf = last;
-        renderAirportLine();
-        await sleep(800);
-        finishAirport();
-        await sleep(1400);
-        if (!intro.hidden) dismissIntro();
-      }
-    }
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", runIntro);
