@@ -66,7 +66,7 @@ window.Scheduler = window.Scheduler || {};
   };
 
   S.writeSharedFile = function (blob, filename) {
-    if (S.updateStatus) S.updateStatus("Writing " + filename + "…");
+    if (S.updateStatus) S.updateStatus("Writing " + filename + "\u2026");
     return blob.arrayBuffer().then(function (buf) {
       return invoke("write_shared_bytes", {
         filename: filename,
@@ -136,6 +136,19 @@ window.Scheduler = window.Scheduler || {};
     return finish(captured);
   }
 
+  function rebindButton(id, fn) {
+    var btn = $(id);
+    if (!btn || !fn || btn._bladeRebound) return;
+    var next = btn.cloneNode(true);
+    btn.parentNode.replaceChild(next, btn);
+    next.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      fn();
+    });
+    next._bladeRebound = true;
+  }
+
   function hookIo() {
     if (typeof S.exportJson === "function" && !S.exportJson._bladeHooked) {
       var origJson = S.exportJson;
@@ -151,23 +164,8 @@ window.Scheduler = window.Scheduler || {};
       };
       S.exportLinesExcel._bladeHooked = true;
     }
-    var btn = $("btn-export");
-    if (btn && S.exportJson) {
-      var fresh = S.exportJson;
-      btn.onclick = null;
-      btn.addEventListener("click", function (e) {
-        e.preventDefault();
-        fresh();
-      });
-    }
-    var xbtn = $("btn-export-lines-excel");
-    if (xbtn && S.exportLinesExcel) {
-      var xf = S.exportLinesExcel;
-      xbtn.addEventListener("click", function (e) {
-        e.preventDefault();
-        xf();
-      });
-    }
+    rebindButton("btn-export", S.exportJson);
+    rebindButton("btn-export-lines-excel", S.exportLinesExcel);
   }
 
   function tickClock() {
