@@ -1,4 +1,4 @@
-/** Smarter auto-form options — start window, partial RDO, sex balance */
+/** Smarter auto-form + RDO sex balance (web). */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -23,6 +23,9 @@ window.Scheduler = window.Scheduler || {};
   function parseRdoDays(p) {
     if (p && Array.isArray(p.rdoDays)) {
       return p.rdoDays.map(Number).filter(function (d) { return d >= 0 && d <= 6; });
+    }
+    if (p && Array.isArray(p.line && p.line.rdoDays)) {
+      return p.line.rdoDays.map(Number).filter(function (d) { return d >= 0 && d <= 6; });
     }
     var raw = p && p.rdo != null ? String(p.rdo) : "";
     if (!raw) return [];
@@ -56,8 +59,8 @@ window.Scheduler = window.Scheduler || {};
   }
 
   function rdoExact(a, b) {
-    var ka = (parseRdoDays(a).slice().sort().join(","));
-    var kb = (parseRdoDays(b).slice().sort().join(","));
+    var ka = parseRdoDays(a).slice().sort().join(",");
+    var kb = parseRdoDays(b).slice().sort().join(",");
     return ka === kb && ka !== "";
   }
 
@@ -108,6 +111,102 @@ window.Scheduler = window.Scheduler || {};
     return Math.abs(m - f) / Math.max(1, m + f);
   }
 
+  function lineRole(l) {
+    if (S.lineRoleKey) return S.lineRoleKey(l);
+    if (l.isStso || l.empClass === "STSO") return "STSO";
+    if (l.isLtso || l.empClass === "LTSO") return "LTSO";
+    return "TSO";
+  }
+
+  function rdoImbalance(lines) {
+    var mTot = 0, fTot = 0;
+    var mDay = [0, 0, 0, 0, 0, 0, 0];
+    var fDay = [0, 0, 0, 0, 0, 0, 0];
+    lines.forEach(function (l) {
+      var sx = sexOf(l);
+      if (sx === "F") fTot++;
+      else mTot++;
+      parseRdoDays(l).forEach(function (d) {
+        if (sx === "F") fDay[d]++;
+        else mDay[d]++;
+      });
+    });
+    var score = 0;
+    for (var d = 0; d < 7; d++) {
+      var mShare = mTot ? mDay[d] / mTot : 0;
+      var fShare = fTot ? fDay[d] / fTot : 0;
+      score += Math.abs(mShare - fShare);
+    }
+    return score;
+  }
+
+  function cloneDays(arr) {
+    return (arr || []).slice();
+  }
+
+  /** Swap RDO patterns among same-role, same-length, non-hard lines to even sex by weekday. */
+  S.rebalanceRdoBySex = function () {
+    var lines = (S.state && S.state.lines) || [];
+    if (!lines.length) return 0;
+    var days = (S.state.weekCount || 1) * 7;
+    var swapped = 0;
+    ["STSO", "LTSO", "TSO"].forEach(function (role) {
+      var group = lines.filter(function (l) {
+        return lineRole(l) === role && !l.rdoHard;
+      });
+      var improved = true;
+      var guard = 0;
+      while (improved && guard++ < 80) {
+        improved = false;
+        var best = null;
+        var base = rdoImbalance(group);
+        for (var i = 0; i < group.length; i++) {
+          for (var j = i + 1; j < group.length; j++) {
+            var a = group[i], b = group[j];
+            if (sexOf(a) === sexOf(b)) continue;
+            if ((a.rdoDays || []).length !== (b.rdoDays || []).length) continue;
+            var da = cloneDays(a.rdoDays), db = cloneDays(b.rdoDays);
+            if (da.slice().sort().join() === db.slice().sort().join()) continue;
+            a.rdoDays = db;
+            b.rdoDays = da;
+            var next = rdoImbalance(group);
+            a.rdoDays = da;
+            b.rdoDays = db;
+            if (next + 0.0001 < base && (!best || next < best.score)) {
+              best = { a: a, b: b, da: da, db: db, score: next };
+            }
+          }
+        }
+        if (best) {
+          best.a.rdoDays = best.db;
+          best.b.rdoDays = best.da;
+          if (S.buildScheduleForLine && S.state.schedule) {
+            S.state.schedule[best.a.id] = S.buildScheduleForLine(best.a, days);
+            S.state.schedule[best.b.id] = S.buildScheduleForLine(best.b, days);
+          }
+          swapped++;
+          improved = true;
+        }
+      }
+    });
+    return swapped;
+  };
+
+  if (typeof S.generate === "function" && !S.generate._sexRdoWrapped) {
+    var origGen = S.generate;
+    S.generate = function () {
+      var r = origGen.apply(this, arguments);
+      var n = S.rebalanceRdoBySex();
+      if (n && S.updateStatus) {
+        S.updateStatus((S.$("status") && S.$("status").textContent ? S.$("status").textContent + " · " : "") +
+          "RDO sex-balanced (" + n + " swap" + (n === 1 ? "" : "s") + ")");
+      }
+      if (n && S.renderAll) S.renderAll();
+      return r;
+    };
+    S.generate._sexRdoWrapped = true;
+  }
+
   S.autoFormTeams = function () {
     S.collectTeamPool();
     var pool = S.teams.pool.slice();
@@ -155,6 +254,11 @@ window.Scheduler = window.Scheduler || {};
       if (allowOne && rdoOverlap(p, anchor) >= 1) return 1;
       return 0;
     }
+    function oppositeSup(p, anchor, role) {
+      if (role !== "LTSO" && role !== "STSO") return 0;
+      if (!anchor) return 0;
+      return sexOf(p) !== sexOf(anchor) ? 1 : 0;
+    }
 
     byRole.STSO.sort(function (a, b) {
       var sa = startMins(a) != null ? startMins(a) : 0;
@@ -185,11 +289,13 @@ window.Scheduler = window.Scheduler || {};
         var scored = [];
         S.teams.teams.forEach(function (t) {
           if (roleNeed(t, role) <= 0) return;
-          var q = matchQuality(p, teamAnchor(t));
+          var anchor = teamAnchor(t);
+          var q = matchQuality(p, anchor);
           if (!q) return;
           scored.push({
             team: t,
             q: q,
+            opp: oppositeSup(p, anchor, role),
             need: roleNeed(t, role),
             teamSex: teamSexScore(t, p),
             roleSex: roleSexScore(t, role, p)
@@ -198,6 +304,7 @@ window.Scheduler = window.Scheduler || {};
         if (!scored.length) return;
         scored.sort(function (a, b) {
           if (b.q !== a.q) return b.q - a.q;
+          if (b.opp !== a.opp) return b.opp - a.opp;
           if (a.teamSex !== b.teamSex) return a.teamSex - b.teamSex;
           if (a.roleSex !== b.roleSex) return a.roleSex - b.roleSex;
           return b.need - a.need;
@@ -219,14 +326,23 @@ window.Scheduler = window.Scheduler || {};
       S.updateStatus(
         "Auto-formed " + nTeams + " team(s) · window " + windowMin + " min" +
           (allowOne ? " · 1-RDO allowed" : " · exact RDO") +
-          " · sex-balanced · " + assignedN + " assigned · " + leftN + " in pool · arch " +
-          stsoPer + "/" + ltsoPer + "/" + tsoPer
+          " · opposite STSO/LTSO sex preferred · " + assignedN + " assigned · " + leftN + " in pool"
       );
     }
   };
 
   function init() {
     injectControls();
+    if (typeof S.generate === "function" && !S.generate._sexRdoWrapped) {
+      var origGen = S.generate;
+      S.generate = function () {
+        var r = origGen.apply(this, arguments);
+        var n = S.rebalanceRdoBySex();
+        if (n && S.renderAll) S.renderAll();
+        return r;
+      };
+      S.generate._sexRdoWrapped = true;
+    }
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
