@@ -1,4 +1,4 @@
-/** Ops-console chrome: clock, header counts, F-key tabs. Does not change scheduler state. */
+/** Ops-console chrome: clock, airport, operator, F-key tabs. */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -27,19 +27,38 @@ window.Scheduler = window.Scheduler || {};
       (st.ltsoM || 0) + (st.ltsoF || 0) + (st.stsoM || 0) + (st.stsoF || 0);
   }
 
+  function fillAirportSelect() {
+    var sel = $("console-airport");
+    if (!sel || sel.tagName !== "SELECT") return;
+    if (!sel.options.length && S.AIRPORTS) {
+      S.AIRPORTS.forEach(function (ap) {
+        var opt = document.createElement("option");
+        opt.value = ap.code;
+        opt.textContent = ap.code;
+        opt.title = ap.name;
+        sel.appendChild(opt);
+      });
+    }
+    if (S.getAirportCode) sel.value = S.getAirportCode();
+    if (!sel._bound) {
+      sel.addEventListener("change", function () {
+        if (S.setAirportCode) S.setAirportCode(sel.value);
+      });
+      sel._bound = true;
+    }
+  }
+
   function refreshHeader() {
     var st = S.state || {};
     var weeks = $("console-weeks");
     var staff = $("console-staff");
     var lines = $("console-lines");
-    var airport = $("console-airport");
+    var op = $("console-operator");
     if (weeks) weeks.textContent = String(st.weekCount || ($("cfg-weeks") && $("cfg-weeks").value) || 1);
     if (staff) staff.textContent = String(staffTotal());
     if (lines) lines.textContent = String((st.lines && st.lines.length) || 0);
-    if (airport) {
-      var name = (st.airport && (st.airport.code || st.airport.name)) || "DFW";
-      airport.textContent = String(name);
-    }
+    if (op && S.getOperator) op.textContent = S.getOperator();
+    fillAirportSelect();
   }
 
   function bindFkeys() {
@@ -59,8 +78,15 @@ window.Scheduler = window.Scheduler || {};
     document.body.classList.add("console-skin");
     tickClock();
     setInterval(tickClock, 1000);
-    refreshHeader();
     bindFkeys();
+    refreshHeader();
+    if (S.detectOperator) S.detectOperator().then(refreshHeader);
+    var linkBtn = $("btn-link-folder");
+    if (linkBtn) {
+      linkBtn.addEventListener("click", function () {
+        if (S.pickSharedFolder) S.pickSharedFolder();
+      });
+    }
     var orig = S.renderAll;
     if (typeof orig === "function" && !orig._consoleWrapped) {
       S.renderAll = function () {
