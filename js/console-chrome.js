@@ -1,4 +1,4 @@
-/** Ops-console chrome + airport/operator + shared-folder export */
+/** Ops-console chrome + OS operator + shared-folder export */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -10,6 +10,11 @@ window.Scheduler = window.Scheduler || {};
   function pad(n) { return n < 10 ? "0" + n : String(n); }
   function fileSafe(name) {
     return String(name || "OPERATOR").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "OPERATOR";
+  }
+  function invoke(cmd, args) {
+    var core = window.__TAURI__ && window.__TAURI__.core;
+    if (core && typeof core.invoke === "function") return core.invoke(cmd, args || {});
+    return Promise.reject(new Error("no-tauri"));
   }
 
   S.getAirportCode = function () {
@@ -50,33 +55,22 @@ window.Scheduler = window.Scheduler || {};
     return !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
   };
   S.detectOperator = function () {
-    if (S.isTauri()) {
-      return window.__TAURI__.core.invoke("get_operator").then(S.setOperator).catch(function () {
-        return S.getOperator();
-      });
-    }
-    return Promise.resolve(S.getOperator());
+    return invoke("get_operator").then(S.setOperator).catch(function () {
+      return S.getOperator();
+    });
   };
 
-  function blobToBytes(blob) {
-    return blob.arrayBuffer().then(function (buf) {
-      return Array.from(new Uint8Array(buf));
-    });
-  }
-
   S.writeSharedFile = function (blob, filename) {
-    if (!S.isTauri()) return Promise.resolve(false);
-    return blobToBytes(blob).then(function (bytes) {
-      return window.__TAURI__.core.invoke("write_shared_bytes", {
-        folder: null,
+    return blob.arrayBuffer().then(function (buf) {
+      return invoke("write_shared_bytes", {
         filename: filename,
-        bytes: bytes
+        bytes: Array.from(new Uint8Array(buf))
       });
     }).then(function (path) {
-      if (S.updateStatus) S.updateStatus("Wrote " + filename + " \u2192 " + path);
+      if (S.updateStatus) S.updateStatus("Wrote " + path);
       return true;
     }).catch(function (err) {
-      if (S.updateStatus) S.updateStatus("Shared-folder write failed: " + (err && err.toString ? err.toString() : err));
+      if (S.updateStatus) S.updateStatus("Share write failed: " + err);
       return false;
     });
   };
@@ -108,12 +102,16 @@ window.Scheduler = window.Scheduler || {};
   function hookIo() {
     if (typeof S.exportJson === "function" && !S.exportJson._bladeHooked) {
       var origJson = S.exportJson;
-      S.exportJson = function () { return interceptDownloadClick(function () { return origJson.apply(S, arguments); }); };
+      S.exportJson = function () {
+        return interceptDownloadClick(function () { return origJson.apply(S, arguments); });
+      };
       S.exportJson._bladeHooked = true;
     }
     if (typeof S.exportLinesExcel === "function" && !S.exportLinesExcel._bladeHooked) {
       var origX = S.exportLinesExcel;
-      S.exportLinesExcel = function () { return interceptDownloadClick(function () { return origX.apply(S, arguments); }); };
+      S.exportLinesExcel = function () {
+        return interceptDownloadClick(function () { return origX.apply(S, arguments); });
+      };
       S.exportLinesExcel._bladeHooked = true;
     }
   }
@@ -157,11 +155,9 @@ window.Scheduler = window.Scheduler || {};
     setTimeout(hookIo, 0);
     refreshHeader();
     S.detectOperator().then(refreshHeader);
-    if (S.isTauri()) {
-      window.__TAURI__.core.invoke("shared_folder_path").then(function (p) {
-        if (S.updateStatus) S.updateStatus("Share target: " + p);
-      }).catch(function () {});
-    }
+    invoke("shared_folder_path").then(function (p) {
+      if (S.updateStatus) S.updateStatus("Share target: " + p);
+    }).catch(function () {});
     document.addEventListener("keydown", function (e) {
       if (e.defaultPrevented) return;
       var tag = (e.target && e.target.tagName) || "";

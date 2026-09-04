@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 fn username() -> String {
     std::env::var("USERNAME")
@@ -7,31 +7,41 @@ fn username() -> String {
         .unwrap_or_else(|_| "OPERATOR".to_string())
 }
 
-fn first_existing(paths: &[PathBuf]) -> Option<PathBuf> {
-    paths.iter().find(|p| p.exists()).cloned()
+fn walk_for_schedule_builder(root: &PathBuf, depth: u8) -> Option<PathBuf> {
+    if depth == 0 {
+        return None;
+    }
+    let target = root.join("Schedule Builder");
+    if target.is_dir() {
+        return Some(target);
+    }
+    if let Ok(rd) = fs::read_dir(root) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+                if name.starts_with("onedrive") || name.contains("ustsa") || name.contains("sharepoint") {
+                    if let Some(found) = walk_for_schedule_builder(&path, depth - 1) {
+                        return Some(found);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 fn discover_schedule_builder() -> PathBuf {
     let user = username();
     let home = PathBuf::from(format!("C:\\Users\\{}", user));
-    let mut candidates = vec![
-        home.join("OneDrive - USTSA").join("Schedule Builder"),
-        home.join("OneDrive - Transportation Security Administration")
-            .join("Schedule Builder"),
-        home.join("OneDrive").join("Schedule Builder"),
-    ];
-    if let Ok(rd) = fs::read_dir(&home) {
-        for entry in rd.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.to_ascii_lowercase().starts_with("onedrive") {
-                candidates.push(entry.path().join("Schedule Builder"));
-            }
-        }
+    let preferred = home.join("OneDrive - USTSA").join("Schedule Builder");
+    if preferred.is_dir() {
+        return preferred;
     }
-    if let Some(found) = first_existing(&candidates) {
+    if let Some(found) = walk_for_schedule_builder(&home, 3) {
         return found;
     }
-    home.join("OneDrive - USTSA").join("Schedule Builder")
+    preferred
 }
 
 #[tauri::command]
@@ -45,33 +55,15 @@ fn shared_folder_path() -> String {
 }
 
 #[tauri::command]
-fn onedrive_hints() -> Vec<String> {
-    vec![shared_folder_path()]
-}
-
-#[tauri::command]
-fn write_shared_bytes(
-    folder: Option<String>,
-    filename: String,
-    bytes: Vec<u8>,
-) -> Result<String, String> {
-    let root = folder
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(discover_schedule_builder);
+fn write_shared_bytes(filename: String, bytes: Vec<u8>) -> Result<String, String> {
+    let root = discover_schedule_builder();
     if !root.exists() {
-        fs::create_dir_all(&root).map_err(|e| {
-            format!("Cannot create {}: {}", root.display(), e)
-        })?;
+        fs::create_dir_all(&root)
+            .map_err(|e| format!("Cannot create {}: {}", root.display(), e))?;
     }
     let dest = root.join(filename);
     fs::write(&dest, bytes).map_err(|e| e.to_string())?;
     Ok(dest.display().to_string())
-}
-
-#[allow(dead_code)]
-fn _touch(path: &Path) {
-    let _ = path;
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -81,7 +73,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_operator,
             shared_folder_path,
-            onedrive_hints,
             write_shared_bytes
         ])
         .run(tauri::generate_context!())
