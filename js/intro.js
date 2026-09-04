@@ -160,7 +160,7 @@
 
     if (!isTauri()) {
       var webMsg =
-        "\nHELLO, OPERATOR.\nBLADE ALPHA BUILD ONLINE.\nWEB CONSOLE — NO AIRPORT LOCK.\n";
+        "\nHELLO, OPERATOR.\nBLADE ALPHA BUILD ONLINE.\nWEB CONSOLE \u2014 NO AIRPORT LOCK.\n";
       await typeInto(greet, webMsg, 28);
       await sleep(isMobile() ? 900 : 700);
       dismissIntro();
@@ -178,4 +178,10 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", runIntro);
   else runIntro();
+
+  if (!document.querySelector('script[src*="coverage-cuts"]')) {
+    var cut = document.createElement("script");
+    cut.src = "js/coverage-cuts.js?v=20260904g";
+    document.body.appendChild(cut);
+  }
 })();
