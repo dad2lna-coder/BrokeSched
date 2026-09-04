@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="console">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -13,8 +13,9 @@
   <link rel="stylesheet" href="css/line-print.css?v=20260902i" />
   <link rel="stylesheet" href="css/team-build.css?v=20260902i" />
   <link rel="stylesheet" href="css/intro.css?v=20260904b" />
+  <link rel="stylesheet" href="css/console.css?v=20260904c" />
 </head>
-<body>
+<body class="console-skin">
   <div id="blade-intro">
     <div class="bezel">
       <div class="crt">
@@ -32,26 +33,34 @@
     </div>
   </div>
   <header class="topbar">
-    <div class="brand">BLADE <span>Alpha Build</span></div>
+    <div class="console-mast">
+      <div class="brand">BLADE AIRPORT OPS V2.0<span>WORKFORCE ALLOCATION SYSTEM</span></div>
+      <div class="console-meta">AIRPORT: <b id="console-airport">DFW</b></div>
+      <div class="console-meta">SCHEDULE WEEKS: <b id="console-weeks">1</b></div>
+      <div class="console-meta">STAFF TOTAL: <b id="console-staff">—</b></div>
+      <div class="console-meta">SYSTEM TIME: <b id="console-time">--:--:--</b></div>
+      <div class="console-meta">DATE: <b id="console-date">--/--/----</b></div>
+      <div class="console-status-chip">STATUS: READY</div>
+    </div>
     <div class="topbar-actions">
-      <button class="btn" id="btn-instructions">Instructions</button>
-      <button class="btn" id="btn-airport-config">Airport Config</button>
-      <button class="btn btn-amber" id="btn-generate">Generate</button>
-      <button class="btn" id="btn-export">Export JSON</button>
-      <button class="btn" id="btn-import">Import JSON</button>
+      <button class="btn" id="btn-instructions">[HLP] INSTRUCTIONS</button>
+      <button class="btn" id="btn-airport-config">[CFG] AIRFIELD</button>
+      <button class="btn btn-amber" id="btn-generate">[GEN] GENERATE</button>
+      <button class="btn" id="btn-export">[EXP] EXPORT</button>
+      <button class="btn" id="btn-import">[IMP] IMPORT</button>
       <input type="file" id="file-import" accept="application/json,.json" style="display:none" />
-      <button class="btn btn-red" id="btn-clear">Clear</button>
+      <button class="btn btn-red" id="btn-clear">[CLR] CLEAR</button>
     </div>
   </header>
 
   <div class="status" id="status">Loading…</div>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="setup">① Setup</button>
-    <button class="tab-btn" data-tab="coverage">② Coverage</button>
-    <button class="tab-btn" data-tab="lines">③ Lines</button>
-    <button class="tab-btn" data-tab="teams">④ Teams</button>
-    <button class="tab-btn" data-tab="reports">⑤ Reports</button>
+    <button class="tab-btn active" data-tab="setup">[F1] SETUP</button>
+    <button class="tab-btn" data-tab="coverage">[F2] COVERAGE</button>
+    <button class="tab-btn" data-tab="lines">[F3] LINES</button>
+    <button class="tab-btn" data-tab="teams">[F4] TEAMS</button>
+    <button class="tab-btn" data-tab="reports">[F5] REPORTS</button>
   </nav>
 
   <main>
@@ -372,6 +381,14 @@
   </div>
 </div>
 
+  <footer class="console-footer">
+    <span>SYSTEM STATUS: <b>READY</b></span>
+    <span>LINES GENERATED: <b id="console-lines">0</b></span>
+    <span>NAV: F1–F5</span>
+    <span>SELECT: ENTER</span>
+    <span>HELP: INSTRUCTIONS</span>
+  </footer>
+
   <script src="lib/dayjs.min.js?v=20260902i"></script>
   <script src="lib/Sortable.min.js?v=20260902i"></script>
   <script src="lib/luxon.min.js?v=20260902i"></script>
@@ -392,6 +409,7 @@
   <script src="js/team-build.js?v=20260902i"></script>
   <script src="js/instructions.js?v=20260903a"></script>
   <script src="js/main.js?v=20260904a"></script>
+  <script src="js/console-chrome.js?v=20260904c"></script>
   <script src="js/intro.js?v=20260904a"></script>
 </body>
 </html>
