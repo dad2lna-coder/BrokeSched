@@ -66,6 +66,7 @@ window.Scheduler = window.Scheduler || {};
   };
 
   S.writeSharedFile = function (blob, filename) {
+    if (S.updateStatus) S.updateStatus("Writing " + filename + "…");
     return blob.arrayBuffer().then(function (buf) {
       return invoke("write_shared_bytes", {
         filename: filename,
@@ -81,44 +82,91 @@ window.Scheduler = window.Scheduler || {};
     });
   };
 
-  function interceptDownloadClick(runFn) {
+  function captureAndShare(runFn, kind, ext) {
+    var captured = null;
+    var origCreate = URL.createObjectURL;
+    URL.createObjectURL = function (blob) {
+      captured = blob;
+      return origCreate.call(URL, blob);
+    };
     var proto = HTMLAnchorElement.prototype;
     var origClick = proto.click;
     proto.click = function () {
-      var a = this;
-      var name = a.download || "";
-      if (S.exportFileName) {
-        if (/scheduler-pre-v4-export|scheduler.*\.json$/i.test(name)) a.download = S.exportFileName("Config", ".json");
-        else if (/scheduler-lines-|scheduler.*\.xlsx$/i.test(name)) a.download = S.exportFileName("Lines", ".xlsx");
-      }
-      if (S.isTauri() && a.href && a.href.indexOf("blob:") === 0) {
-        fetch(a.href).then(function (r) { return r.blob(); }).then(function (blob) {
-          return S.writeSharedFile(blob, a.download);
-        }).then(function (ok) {
-          if (!ok) origClick.apply(a, []);
-        });
-        return;
-      }
+      if (S.isTauri() && captured) return;
       return origClick.apply(this, arguments);
     };
-    try { return runFn(); }
-    finally { proto.click = origClick; }
+    var result;
+    try {
+      result = runFn();
+    } finally {
+      URL.createObjectURL = origCreate;
+    }
+    function finish(blob) {
+      proto.click = origClick;
+      if (!blob) {
+        if (S.updateStatus) S.updateStatus("Export produced no file.");
+        return;
+      }
+      var name = S.exportFileName(kind, ext);
+      if (S.isTauri()) {
+        return S.writeSharedFile(blob, name).then(function (ok) {
+          if (!ok) {
+            var a = document.createElement("a");
+            a.href = origCreate.call(URL, blob);
+            a.download = name;
+            document.body.appendChild(a);
+            origClick.call(a);
+            document.body.removeChild(a);
+          }
+        });
+      }
+      var a = document.createElement("a");
+      a.href = origCreate.call(URL, blob);
+      a.download = name;
+      document.body.appendChild(a);
+      origClick.call(a);
+      document.body.removeChild(a);
+    }
+    if (result && typeof result.then === "function") {
+      return result.then(function () { return finish(captured); }).catch(function (err) {
+        proto.click = origClick;
+        if (S.updateStatus) S.updateStatus("Export failed: " + err);
+      });
+    }
+    return finish(captured);
   }
 
   function hookIo() {
     if (typeof S.exportJson === "function" && !S.exportJson._bladeHooked) {
       var origJson = S.exportJson;
       S.exportJson = function () {
-        return interceptDownloadClick(function () { return origJson.apply(S, arguments); });
+        return captureAndShare(function () { return origJson.apply(S, arguments); }, "Config", ".json");
       };
       S.exportJson._bladeHooked = true;
     }
     if (typeof S.exportLinesExcel === "function" && !S.exportLinesExcel._bladeHooked) {
       var origX = S.exportLinesExcel;
       S.exportLinesExcel = function () {
-        return interceptDownloadClick(function () { return origX.apply(S, arguments); });
+        return captureAndShare(function () { return origX.apply(S, arguments); }, "Lines", ".xlsx");
       };
       S.exportLinesExcel._bladeHooked = true;
+    }
+    var btn = $("btn-export");
+    if (btn && S.exportJson) {
+      var fresh = S.exportJson;
+      btn.onclick = null;
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        fresh();
+      });
+    }
+    var xbtn = $("btn-export-lines-excel");
+    if (xbtn && S.exportLinesExcel) {
+      var xf = S.exportLinesExcel;
+      xbtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        xf();
+      });
     }
   }
 
