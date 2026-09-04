@@ -4,6 +4,16 @@ window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
+  function safeInit(name, fn) {
+    if (typeof fn !== "function") return;
+    try {
+      fn();
+    } catch (err) {
+      console.error("Init failed:", name, err);
+      if (S.updateStatus) S.updateStatus("Init warning: " + name + " failed.");
+    }
+  }
+
   function init() {
     if (S.$("cfg-start") && !S.$("cfg-start").value) {
       var d = S.parseStartDate(null);
@@ -134,13 +144,13 @@ window.Scheduler = window.Scheduler || {};
       });
     }
 
-    S.initAirportConfig();
-    S.renderShiftsTable();
-    if (S.initTeams) S.initTeams();
-    if (S.initShiftDayTimes) S.initShiftDayTimes();
-    if (S.initFunctionCoverage) S.initFunctionCoverage();
-    if (S.initReports) S.initReports();
-    if (S.bindLinesUI) S.bindLinesUI();
+    safeInit("airport", S.initAirportConfig);
+    safeInit("shifts", S.renderShiftsTable);
+    safeInit("teams", S.initTeams);
+    safeInit("shiftDayTimes", S.initShiftDayTimes);
+    safeInit("functionCoverage", S.initFunctionCoverage);
+    safeInit("reports", S.initReports);
+    safeInit("linesUI", S.bindLinesUI);
 
     function onNewTeam(e) {
       if (e) {
@@ -159,8 +169,8 @@ window.Scheduler = window.Scheduler || {};
       if (btn) btn.addEventListener("click", onNewTeam);
     });
 
-    S.updateStatus("BLADE Alpha Build — boot 20260904a");
-    S.renderAll();
+    S.updateStatus("BLADE Alpha Build — boot 20260904d");
+    if (S.renderAll) S.renderAll();
   }
 
   document.addEventListener("DOMContentLoaded", init);
