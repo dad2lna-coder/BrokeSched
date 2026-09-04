@@ -1,4 +1,4 @@
-/** Capacity: mod sets are nested checkpoints. Their lanes add. */
+/** Capacity: checkpoint lanes + half-hour throughput */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -11,6 +11,19 @@ window.Scheduler = window.Scheduler || {};
   function lanesOf(ms) {
     var n = Number(ms && ms.lanes);
     return Number.isFinite(n) && n >= 0 ? n : 2;
+  }
+  function rates() {
+    var v = cfg().volumePerHour || {};
+    var std = Number(v.STD) || 150;
+    var pre = Number(v.PRE) || 240;
+    var mix = Number(v.MIX);
+    if (!Number.isFinite(mix) || mix <= 0) mix = (std + pre) / 2;
+    return { STD: std, PRE: pre, MIX: mix };
+  }
+  function paxHalf(program, laneCount) {
+    var r = rates();
+    var perHour = r[program] != null ? r[program] : r.STD;
+    return laneCount * perHour / 2;
   }
   function windowOf(node, parent) {
     var start = toMin((node && node.startTime) || (parent && parent.startTime) || cfg().startTime || "03:30");
@@ -40,168 +53,136 @@ window.Scheduler = window.Scheduler || {};
   S.computeLaneCapacityMatrix = function () {
     var c = cfg();
     var slots = S.capacitySlots();
-    var units = [];
-    var plantAirport = 0;
+    var cps = [];
     (c.terminals || []).forEach(function (term) {
       (term.checkpoints || []).forEach(function (cp) {
-        var sets = cp.modSets || [];
-        if (!sets.length) {
-          units.push({
-            key: "t" + term.id + "c" + cp.id + "m0",
-            terminalId: term.id, terminal: term.name,
-            checkpointId: cp.id, checkpoint: cp.name,
-            modSetId: 0, modLabel: "(none)", program: "STD", plant: 0, ms: null, term: term, cp: cp
-          });
-          return;
-        }
-        sets.forEach(function (ms, idx) {
-          var plant = lanesOf(ms);
-          plantAirport += plant;
-          units.push({
-            key: "t" + term.id + "c" + cp.id + "m" + (ms.id || idx),
-            terminalId: term.id, terminal: term.name,
-            checkpointId: cp.id, checkpoint: cp.name,
-            modSetId: ms.id, modLabel: "Set " + (idx + 1),
-            program: ms.program || "STD", plant: plant, ms: ms, term: term, cp: cp
-          });
+        cps.push({
+          key: "t" + term.id + "c" + cp.id,
+          terminalId: term.id,
+          terminal: term.name,
+          checkpointId: cp.id,
+          checkpoint: cp.name,
+          term: term,
+          cp: cp
         });
       });
     });
     var rows = slots.map(function (slot) {
-      var cells = {};
       var byCp = {};
       var byTerm = {};
-      var byProgram = { STD: 0, PRE: 0, MIX: 0 };
-      var airport = 0;
-      units.forEach(function (u) {
-        var open = u.ms ? setOpen(u.ms, u.cp, u.term, slot) : false;
-        var n = open ? u.plant : 0;
-        cells[u.key] = { lanes: n, program: u.program, open: open };
-        var ck = "t" + u.terminalId + "c" + u.checkpointId;
-        byCp[ck] = (byCp[ck] || 0) + n;
-        byTerm[u.terminalId] = (byTerm[u.terminalId] || 0) + n;
-        airport += n;
-        if (n && byProgram[u.program] != null) byProgram[u.program] += n;
+      var airportLanes = 0;
+      var airportPax = 0;
+      var paxByProg = { STD: 0, PRE: 0, MIX: 0 };
+      cps.forEach(function (col) {
+        var lanes = 0;
+        var pax = 0;
+        (col.cp.modSets || []).forEach(function (ms) {
+          if (!setOpen(ms, col.cp, col.term, slot)) return;
+          var n = lanesOf(ms);
+          var prog = ms.program || "STD";
+          lanes += n;
+          var half = paxHalf(prog, n);
+          pax += half;
+          if (paxByProg[prog] != null) paxByProg[prog] += half;
+        });
+        byCp[col.key] = { lanes: lanes, pax: pax };
+        if (!byTerm[col.terminalId]) byTerm[col.terminalId] = { lanes: 0, pax: 0 };
+        byTerm[col.terminalId].lanes += lanes;
+        byTerm[col.terminalId].pax += pax;
+        airportLanes += lanes;
+        airportPax += pax;
       });
-      return { slot: slot, time: label(slot), cells: cells, byCheckpoint: byCp, byTerminal: byTerm, airport: airport, byProgram: byProgram };
+      return {
+        slot: slot,
+        time: label(slot),
+        byCheckpoint: byCp,
+        byTerminal: byTerm,
+        airportLanes: airportLanes,
+        airportPax: airportPax,
+        paxByProg: paxByProg
+      };
     });
-    var peak = 0;
-    rows.forEach(function (r) { if (r.airport > peak) peak = r.airport; });
+    var peakLanes = 0;
+    var peakPax = 0;
+    rows.forEach(function (r) {
+      if (r.airportLanes > peakLanes) peakLanes = r.airportLanes;
+      if (r.airportPax > peakPax) peakPax = r.airportPax;
+    });
     return {
-      units: units,
+      checkpoints: cps,
       terminals: (c.terminals || []).map(function (t) { return { id: t.id, name: t.name }; }),
       rows: rows,
-      peak: peak,
-      plantAirport: plantAirport
+      rates: rates(),
+      peakLanes: peakLanes,
+      peakPax: peakPax
     };
   };
 
   S.computeCapacity = S.computeLaneCapacityMatrix;
 
-  S.laneCapacityAt = function (terminalId, checkpointId, timeText) {
-    var slot = toMin(timeText);
-    var m = S.computeLaneCapacityMatrix();
-    var row = null;
-    m.rows.forEach(function (r) { if (r.slot === slot) row = r; });
-    if (!row) {
-      m.rows.forEach(function (r) { if (r.time === timeText) row = r; });
-    }
-    if (!row) return { time: timeText, lanes: 0, detail: [] };
-    var detail = m.units.filter(function (u) {
-      if (terminalId != null && String(u.terminalId) !== String(terminalId) && u.terminal !== terminalId) return false;
-      if (checkpointId != null && String(u.checkpointId) !== String(checkpointId) && u.checkpoint !== checkpointId) return false;
-      return true;
-    }).map(function (u) {
-      var cell = row.cells[u.key] || { lanes: 0 };
-      return { terminal: u.terminal, checkpoint: u.checkpoint, modSet: u.modLabel, program: u.program, lanes: cell.lanes, plant: u.plant };
-    });
-    var lanes = 0;
-    detail.forEach(function (d) { lanes += d.lanes; });
-    return { time: timeText, lanes: lanes, detail: detail };
-  };
-
   function heat(n, peak) {
     if (!n) return "hc-0";
-    if (n >= peak && peak) return "hc-high";
+    if (peak && n >= peak) return "hc-high";
     if (peak && n <= peak * 0.4) return "hc-low";
     return "hc-ok";
+  }
+  function num(n) {
+    if (!n) return "";
+    return Math.round(n * 10) / 10;
   }
 
   S.renderCapacity = function () {
     var host = S.$("tab-capacity");
     if (!host) return;
     var matrix = S.computeLaneCapacityMatrix();
-    var filter = "";
-    var existing = S.$("cap-filter-term");
-    if (existing) filter = existing.value || "";
-    var units = matrix.units.filter(function (u) {
-      return !filter || String(u.terminalId) === String(filter);
+    var filter = (S.$("cap-filter-term") && S.$("cap-filter-term").value) || "";
+    var cols = matrix.checkpoints.filter(function (c) {
+      return !filter || String(c.terminalId) === String(filter);
     });
     var opts = '<option value="">All terminals</option>';
     matrix.terminals.forEach(function (t) {
       opts += '<option value="' + t.id + '"' + (String(filter) === String(t.id) ? " selected" : "") + ">" +
         String(t.name).replace(/</g, "<") + "</option>";
     });
-    var plantRows = units.map(function (u) {
-      return "<tr><td>" + u.terminal + "</td><td>" + u.checkpoint + "</td><td>" + u.modLabel +
-        "</td><td>" + u.program + "</td><td>" + u.plant + "</td></tr>";
-    }).join("") || '<tr><td class="muted" colspan="5">No mod sets in Airfield.</td></tr>';
-
+    var r = matrix.rates;
     var head = "<tr><th>Time</th>";
-    var seenTerm = {};
-    var seenCp = {};
-    units.forEach(function (u) {
-      if (!seenTerm[u.terminalId]) {
-        seenTerm[u.terminalId] = 1;
-        head += '<th class="muted">' + u.terminal + " tot</th>";
+    var seen = {};
+    cols.forEach(function (c) {
+      if (!seen[c.terminalId]) {
+        seen[c.terminalId] = 1;
+        head += '<th class="muted">' + c.terminal + "</th>";
       }
-      var ck = "t" + u.terminalId + "c" + u.checkpointId;
-      if (!seenCp[ck]) {
-        seenCp[ck] = 1;
-        head += "<th>" + u.checkpoint + " tot</th>";
-      }
-      head += "<th>" + u.checkpoint + " " + u.modLabel + "<div class=\"muted\">" + u.program + " · " + u.plant + "</div></th>";
+      head += "<th>" + c.checkpoint + " lanes</th><th>" + c.checkpoint + " pax/30</th>";
     });
-    head += "<th>Airport</th><th>STD</th><th>PRE</th><th>MIX</th></tr>";
+    head += "<th>Airport lanes</th><th>Airport pax/30</th></tr>";
 
-    var body = matrix.rows.map(function (r) {
-      var html = "<td>" + r.time + "</td>";
-      seenTerm = {};
-      seenCp = {};
-      units.forEach(function (u) {
-        if (!seenTerm[u.terminalId]) {
-          seenTerm[u.terminalId] = 1;
-          html += '<td class="' + heat(r.byTerminal[u.terminalId] || 0, matrix.peak) + '"><strong>' +
-            (r.byTerminal[u.terminalId] || 0) + "</strong></td>";
+    var body = matrix.rows.map(function (row) {
+      var html = "<td>" + row.time + "</td>";
+      seen = {};
+      cols.forEach(function (c) {
+        if (!seen[c.terminalId]) {
+          seen[c.terminalId] = 1;
+          var t = row.byTerminal[c.terminalId] || { lanes: 0, pax: 0 };
+          html += '<td class="' + heat(t.lanes, matrix.peakLanes) + '"><strong>' + (t.lanes || "") + "</strong></td>";
         }
-        var ck = "t" + u.terminalId + "c" + u.checkpointId;
-        if (!seenCp[ck]) {
-          seenCp[ck] = 1;
-          html += '<td class="' + heat(r.byCheckpoint[ck] || 0, matrix.peak) + '"><strong>' +
-            (r.byCheckpoint[ck] || 0) + "</strong></td>";
-        }
-        var cell = r.cells[u.key] || { lanes: 0 };
-        html += '<td class="' + heat(cell.lanes, matrix.peak) + '">' + (cell.lanes || "") + "</td>";
+        var cell = row.byCheckpoint[c.key] || { lanes: 0, pax: 0 };
+        html += '<td class="' + heat(cell.lanes, matrix.peakLanes) + '">' + (cell.lanes || "") + "</td>";
+        html += '<td class="' + heat(cell.pax, matrix.peakPax) + '">' + num(cell.pax) + "</td>";
       });
-      html += "<td><strong>" + r.airport + "</strong></td>";
-      html += "<td>" + r.byProgram.STD + "</td><td>" + r.byProgram.PRE + "</td><td>" + r.byProgram.MIX + "</td>";
+      html += "<td><strong>" + (row.airportLanes || "") + "</strong></td>";
+      html += "<td><strong>" + num(row.airportPax) + "</strong></td>";
       return "<tr>" + html + "</tr>";
     }).join("");
-    if (!units.length) body = '<tr><td class="muted" colspan="8">Add terminals, checkpoints, and mod sets in Airfield.</td></tr>';
+    if (!cols.length) body = '<tr><td class="muted" colspan="8">Add checkpoints in Airfield.</td></tr>';
 
     host.innerHTML =
       '<div class="card">' +
-      '<div class="section-title">Physical plant (mod sets add)</div>' +
-      '<p class="muted" id="capacity-summary">Plant ' + matrix.plantAirport +
-      ' lanes. Two checkpoints × three sets × two lanes = 12. Peak open ' + matrix.peak + ".</p>" +
+      '<div class="section-title">Half-hour checkpoint throughput</div>' +
+      '<p class="muted">STD ' + r.STD + "/lane/hr · PRE " + r.PRE + "/lane/hr · MIX " + r.MIX +
+      "/lane/hr (amalgam). Pax/30 = open lanes × rate ÷ 2.</p>" +
       '<div class="toolbar"><label>Terminal <select id="cap-filter-term">' + opts + "</select></label></div>" +
-      '<div class="lines-scroll"><table class="data-table"><thead><tr>' +
-      "<th>Terminal</th><th>Checkpoint</th><th>Mod set</th><th>Program</th><th>Lanes</th></tr></thead>" +
-      "<tbody>" + plantRows + "</tbody></table></div></div>" +
-      '<div class="card">' +
-      '<div class="section-title">30-minute open lanes</div>' +
-      '<div class="lines-scroll"><table class="data-table cov-matrix">' +
-      "<thead>" + head + "</thead><tbody>" + body + "</tbody></table></div></div>";
+      '<div class="lines-scroll"><table class="data-table cov-matrix"><thead>' + head +
+      "</thead><tbody>" + body + "</tbody></table></div></div>";
 
     var sel = S.$("cap-filter-term");
     if (sel) sel.addEventListener("change", function () { S.renderCapacity(); });
