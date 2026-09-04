@@ -1,122 +1,234 @@
-/** Capacity tab — checkpoint TSO / STSO / LTSO demand from airfield config */
+/** 30-minute active-lane capacity from Airfield hierarchy */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
-  function costFor(terminal, program) {
-    var c = (terminal && terminal.baseTSOCost) || {};
-    if (program === "PRE") return Number(c.PRE) || 0;
-    if (program === "MIX") return Number(c.MIX) || 0;
-    return Number(c.STD) || 0;
+  function cfg() {
+    return (S.getAirportConfig && S.getAirportConfig()) || { startTime: "03:30", endTime: "23:00", terminals: [] };
   }
 
-  function pool() {
-    var st = S.state || {};
-    return {
-      tso: (st.ftM || 0) + (st.ftF || 0) + (st.ptM || 0) + (st.ptF || 0),
-      ltso: (st.ltsoM || 0) + (st.ltsoF || 0),
-      stso: (st.stsoM || 0) + (st.stsoF || 0)
-    };
+  function toMin(t) {
+    return S.timeToMin ? S.timeToMin(t) : 0;
   }
 
-  S.computeCapacity = function () {
-    var cfg = S.getAirportConfig ? S.getAirportConfig() : { terminals: [] };
-    var terminals = (cfg && cfg.terminals) || [];
-    var rows = [];
-    var peakTso = 0;
-    var openCheckpoints = 0;
-    var openTerminals = 0;
+  function label(m) {
+    return S.slotLabel ? S.slotLabel(m) : S.minToTime(m);
+  }
 
-    terminals.forEach(function (term) {
-      var termTso = 0;
-      var cps = term.checkpoints || [];
-      if (cps.length) openTerminals++;
-      cps.forEach(function (cp) {
-        openCheckpoints++;
-        var sets = (cp.modSets && cp.modSets.length)
-          ? cp.modSets.slice()
-          : [{ startTime: cp.startTime, lanes: 0, program: "STD" }];
-        sets.sort(function (a, b) {
-          return S.timeToMin(a.startTime || "00:00") - S.timeToMin(b.startTime || "00:00");
-        });
-        var first = sets[0];
-        var tsoNeed = (Number(first.lanes) || 0) * costFor(term, first.program);
-        termTso += tsoNeed;
-        sets.forEach(function (ms) {
-          rows.push({
-            terminal: term.name,
-            checkpoint: cp.name,
-            start: ms.startTime || cp.startTime || "—",
-            lanes: Number(ms.lanes) || 0,
-            program: ms.program || "STD",
-            tsoPerLane: costFor(term, ms.program || "STD"),
-            tsoNeed: (Number(ms.lanes) || 0) * costFor(term, ms.program || "STD"),
-            stsoNeed: 1,
-            ltsoNeed: 1
-          });
+  function windowOf(node, parent) {
+    var start = toMin(node && node.startTime || (parent && parent.startTime) || cfg().startTime || "03:30");
+    var end = toMin(node && node.endTime || (parent && parent.endTime) || cfg().endTime || "23:00");
+    if (end <= start) end += 1440;
+    return { start: start, end: end };
+  }
+
+  function sortedModSets(cp) {
+    return (cp.modSets || []).slice().sort(function (a, b) {
+      return toMin(a.startTime || "00:00") - toMin(b.startTime || "00:00");
+    });
+  }
+
+  function activeModSet(cp, term, slotMin) {
+    var win = windowOf(cp, term);
+    if (slotMin < win.start || slotMin >= win.end) return null;
+    var sets = sortedModSets(cp);
+    if (!sets.length) return null;
+    var found = null;
+    for (var i = 0; i < sets.length; i++) {
+      var msStart = toMin(sets[i].startTime || cp.startTime);
+      if (msStart <= slotMin) found = sets[i];
+    }
+    return found;
+  }
+
+  S.capacitySlots = function () {
+    var c = cfg();
+    var open = toMin(c.startTime || (S.state && S.state.open) || "03:30");
+    var close = toMin(c.endTime || (S.state && S.state.close) || "23:00");
+    open = Math.floor(open / 30) * 30;
+    close = Math.ceil(close / 30) * 30;
+    if (close <= open) close += 1440;
+    var slots = [];
+    for (var m = open; m < close; m += 30) slots.push(m);
+    return slots;
+  };
+
+  S.laneCapacityAt = function (terminalId, checkpointId, timeText) {
+    var slot = toMin(timeText);
+    var c = cfg();
+    var total = 0;
+    var hits = [];
+    (c.terminals || []).forEach(function (term) {
+      if (terminalId != null && String(term.id) !== String(terminalId) && term.name !== terminalId) return;
+      (term.checkpoints || []).forEach(function (cp) {
+        if (checkpointId != null && String(cp.id) !== String(checkpointId) && cp.name !== checkpointId) return;
+        var ms = activeModSet(cp, term, slot);
+        var lanes = ms ? (Number(ms.lanes) || 0) : 0;
+        total += lanes;
+        hits.push({
+          terminalId: term.id,
+          terminal: term.name,
+          checkpointId: cp.id,
+          checkpoint: cp.name,
+          lanes: lanes,
+          program: ms ? (ms.program || "STD") : null,
+          modSetId: ms ? ms.id : null
         });
       });
-      peakTso += termTso;
     });
+    return { time: timeText, lanes: total, detail: hits };
+  };
 
-    var p = pool();
-    var stdCost = 0, preCost = 0, mixCost = 0;
-    terminals.forEach(function (term) {
-      var c = term.baseTSOCost || {};
-      if (!stdCost && c.STD) stdCost = +c.STD;
-      if (!preCost && c.PRE) preCost = +c.PRE;
-      if (!mixCost && c.MIX) mixCost = +c.MIX;
+  S.computeLaneCapacityMatrix = function () {
+    var c = cfg();
+    var slots = S.capacitySlots();
+    var columns = [];
+    (c.terminals || []).forEach(function (term) {
+      (term.checkpoints || []).forEach(function (cp) {
+        columns.push({
+          key: "t" + term.id + "c" + cp.id,
+          terminalId: term.id,
+          terminal: term.name,
+          checkpointId: cp.id,
+          checkpoint: cp.name
+        });
+      });
     });
-    if (!stdCost) stdCost = 3;
-    if (!preCost) preCost = 2;
-    if (!mixCost) mixCost = 3;
-
+    var rows = slots.map(function (slot) {
+      var cells = {};
+      var byTerm = {};
+      var airport = 0;
+      var byProgram = { STD: 0, PRE: 0, MIX: 0 };
+      (c.terminals || []).forEach(function (term) {
+        var termTot = 0;
+        (term.checkpoints || []).forEach(function (cp) {
+          var ms = activeModSet(cp, term, slot);
+          var lanes = ms ? (Number(ms.lanes) || 0) : 0;
+          var prog = ms ? (ms.program || "STD") : null;
+          cells["t" + term.id + "c" + cp.id] = {
+            lanes: lanes,
+            program: prog,
+            modSetId: ms ? ms.id : null
+          };
+          termTot += lanes;
+          if (prog && byProgram[prog] != null) byProgram[prog] += lanes;
+        });
+        byTerm[term.id] = termTot;
+        airport += termTot;
+      });
+      return {
+        slot: slot,
+        time: label(slot),
+        cells: cells,
+        byTerminal: byTerm,
+        airport: airport,
+        byProgram: byProgram
+      };
+    });
+    var peak = 0;
+    var minOpen = Infinity;
+    rows.forEach(function (r) {
+      if (r.airport > peak) peak = r.airport;
+      if (r.airport > 0 && r.airport < minOpen) minOpen = r.airport;
+    });
+    if (!isFinite(minOpen)) minOpen = 0;
     return {
-      pool: p,
+      slots: slots,
+      columns: columns,
+      terminals: (c.terminals || []).map(function (t) { return { id: t.id, name: t.name }; }),
       rows: rows,
-      peakTso: peakTso,
-      openCheckpoints: openCheckpoints,
-      openTerminals: openTerminals,
-      stsoNeed: openCheckpoints,
-      ltsoNeed: openTerminals,
-      canRun: {
-        STD: stdCost ? Math.floor(p.tso / stdCost) : 0,
-        PRE: preCost ? Math.floor(p.tso / preCost) : 0,
-        MIX: mixCost ? Math.floor(p.tso / mixCost) : 0
-      },
-      costs: { STD: stdCost, PRE: preCost, MIX: mixCost }
+      peak: peak,
+      minOpen: minOpen
     };
   };
 
+  S.computeCapacity = S.computeLaneCapacityMatrix;
+
+  function heat(n, peak) {
+    if (!n) return "hc-0";
+    if (!peak) return "hc-ok";
+    if (n >= peak) return "hc-high";
+    if (n <= peak * 0.4) return "hc-low";
+    return "hc-ok";
+  }
+
   S.renderCapacity = function () {
-    var cap = S.computeCapacity();
-    var sum = S.$("capacity-summary");
-    var body = S.$("capacity-tbody");
-    var p = cap.pool;
-    if (sum) {
-      sum.innerHTML =
-        "On-hand TSO <strong>" + p.tso + "</strong> · STSO <strong>" + p.stso +
-        "</strong> · LTSO <strong>" + p.ltso + "</strong><br>" +
-        "Checkpoint demand (first mod set each) TSO <strong>" + cap.peakTso +
-        "</strong> · STSO seats <strong>" + cap.stsoNeed +
-        "</strong> · LTSO seats <strong>" + cap.ltsoNeed + "</strong><br>" +
-        "With this TSO pool you could run " +
-        "<strong>" + cap.canRun.STD + "</strong> STD lanes, " +
-        "<strong>" + cap.canRun.PRE + "</strong> PRE lanes, or " +
-        "<strong>" + cap.canRun.MIX + "</strong> MIX lanes " +
-        "(cost " + cap.costs.STD + "/" + cap.costs.PRE + "/" + cap.costs.MIX + " TSO per lane).";
+    var host = S.$("tab-capacity");
+    if (!host) return;
+    var matrix = S.computeLaneCapacityMatrix();
+    var filter = (S.$("cap-filter-term") && S.$("cap-filter-term").value) || "";
+    var cols = matrix.columns.filter(function (col) {
+      return !filter || String(col.terminalId) === String(filter);
+    });
+    var termOpts = '<option value="">All terminals</option>';
+    matrix.terminals.forEach(function (t) {
+      termOpts += '<option value="' + t.id + '"' + (String(filter) === String(t.id) ? " selected" : "") + ">" +
+        String(t.name).replace(/</g, "<") + "</option>";
+    });
+    var head = "<tr><th>Time</th>";
+    var lastTerm = null;
+    cols.forEach(function (col) {
+      if (col.terminal !== lastTerm) {
+        lastTerm = col.terminal;
+        head += '<th class="muted">' + col.terminal + "</th>";
+      }
+      head += "<th>" + col.checkpoint + "</th>";
+    });
+    head += "<th>Airport</th><th>STD</th><th>PRE</th><th>MIX</th></tr>";
+    var body;
+    if (!cols.length) {
+      body = '<tr><td class="muted" colspan="8">Add terminals and checkpoints in Airfield.</td></tr>';
+    } else {
+      body = matrix.rows.map(function (r) {
+        var html = "<td>" + r.time + "</td>";
+        lastTerm = null;
+        cols.forEach(function (col) {
+          if (col.terminal !== lastTerm) {
+            lastTerm = col.terminal;
+            html += '<td class="' + heat(r.byTerminal[col.terminalId] || 0, matrix.peak) + '"><strong>' +
+              (r.byTerminal[col.terminalId] || 0) + "</strong></td>";
+          }
+          var cell = r.cells[col.key] || { lanes: 0, program: null };
+          var title = cell.program ? cell.program + " · " + cell.lanes + " lanes" : "closed";
+          html += '<td class="' + heat(cell.lanes, matrix.peak) + '" title="' + title + '">' +
+            (cell.lanes || "") +
+            (cell.program && cell.lanes ? '<div class="muted">' + cell.program + "</div>" : "") +
+            "</td>";
+        });
+        html += '<td><strong>' + r.airport + "</strong></td>";
+        html += "<td>" + r.byProgram.STD + "</td><td>" + r.byProgram.PRE + "</td><td>" + r.byProgram.MIX + "</td>";
+        return "<tr>" + html + "</tr>";
+      }).join("");
     }
-    if (!body) return;
-    if (!cap.rows.length) {
-      body.innerHTML = '<tr><td colspan="8" class="muted">Add terminals and checkpoints in Airfield.</td></tr>';
-      return;
+    var card = host.querySelector(".card") || host;
+    if (!S.$("capacity-matrix-head")) {
+      card.innerHTML =
+        '<div class="section-title">30-minute active lanes</div>' +
+        '<p class="muted" id="capacity-summary"></p>' +
+        '<div class="toolbar" style="flex-wrap:wrap;gap:0.75rem">' +
+        '<label>Terminal <select id="cap-filter-term">' + termOpts + "</select></label>" +
+        "</div>" +
+        '<div class="lines-scroll">' +
+        '<table class="data-table cov-matrix" id="capacity-matrix">' +
+        '<thead id="capacity-matrix-head"></thead>' +
+        '<tbody id="capacity-matrix-body"></tbody>' +
+        "</table></div>";
+    } else if (S.$("cap-filter-term")) {
+      S.$("cap-filter-term").innerHTML = termOpts;
     }
-    body.innerHTML = cap.rows.map(function (r) {
-      return "<tr><td>" + r.terminal + "</td><td>" + r.checkpoint +
-        "</td><td>" + r.start + "</td><td>" + r.lanes +
-        "</td><td>" + r.program + "</td><td>" + r.tsoPerLane +
-        "</td><td>" + r.tsoNeed + "</td><td>STSO 1 / LTSO 1</td></tr>";
-    }).join("");
+    if (S.$("capacity-matrix-head")) S.$("capacity-matrix-head").innerHTML = head;
+    if (S.$("capacity-matrix-body")) S.$("capacity-matrix-body").innerHTML = body;
+    if (S.$("capacity-summary")) {
+      S.$("capacity-summary").textContent =
+        "Counts each open lane in the mod set covering that 30 minutes. " +
+        "A checkpoint is closed outside its hours. Peak airport lanes " + matrix.peak +
+        ", lowest open bucket " + matrix.minOpen + ".";
+    }
+    var sel = S.$("cap-filter-term");
+    if (sel && !sel._capBound) {
+      sel._capBound = true;
+      sel.addEventListener("change", function () { S.renderCapacity(); });
+    }
   };
 
   S.initCapacity = function () {
