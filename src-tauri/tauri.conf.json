@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "BrokeSched",
+  "productName": "BLADE",
   "version": "0.2.0",
   "identifier": "com.dad2lna.brokesched",
   "build": {
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "BrokeSched",
+        "title": "BLADE Alpha Build",
         "width": 1440,
         "height": 920,
         "minWidth": 1024,
