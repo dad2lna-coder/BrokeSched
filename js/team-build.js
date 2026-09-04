@@ -114,6 +114,26 @@ window.Scheduler = window.Scheduler || {};
     modal.classList.add("is-open");
   };
 
+  S.closeTeamUi = function () {
+    S.teams.buildOpen = false;
+    (S.teams.teams || []).forEach(function (t) { t.followMe = false; });
+    if (S.teams.selected) S.teams.selected = {};
+    var md = S.$("team-detail-modal");
+    if (md) {
+      md.style.display = "none";
+      md.classList.remove("is-open");
+    }
+    var docks = S.$("team-follow-docks");
+    if (docks) {
+      docks.hidden = true;
+      docks.classList.remove("is-active");
+    }
+    document.body.classList.remove("team-follow-active");
+    if (S.applyFollowMe) S.applyFollowMe();
+    if (S.renderTeams) S.renderTeams();
+    if (S.updateStatus) S.updateStatus("Team builder closed");
+  };
+
   S.toggleFollowTeam = function (teamId) {
     var team = S.getTeamById(teamId);
     if (!team) return;
@@ -240,9 +260,10 @@ window.Scheduler = window.Scheduler || {};
       if (S.initFloatPanels) S.initFloatPanels();
       return true;
     }
-    if (t.id === "btn-build-close") {
-      S.teams.buildOpen = false;
-      if (!(S.teams.teams || []).some(function (tm) { return tm.followMe; })) S.applyFollowMe();
+    if (t.id === "btn-build-close" || t.id === "team-detail-close" || t.closest("#btn-build-close") || t.closest("#team-detail-close")) {
+      e.preventDefault();
+      e.stopPropagation();
+      S.closeTeamUi();
       return true;
     }
     var build = t.closest("[data-build-team]");
@@ -257,14 +278,6 @@ window.Scheduler = window.Scheduler || {};
       S.openTeamEditModal(edit.getAttribute("data-team-edit"));
       return true;
     }
-    if (t.id === "team-detail-close") {
-      var md = S.$("team-detail-modal");
-      if (md) {
-        md.style.display = "none";
-        md.classList.remove("is-open");
-      }
-      return true;
-    }
     return false;
   }
 
@@ -275,9 +288,56 @@ window.Scheduler = window.Scheduler || {};
       handleTeamPointer(e);
     }, true);
   }
-  if (!document.querySelector('script[src*="team-form-smart"]')) {
-    var smart = document.createElement("script");
-    smart.src = "js/team-form-smart.js?v=20260904e";
-    document.body.appendChild(smart);
+
+  S.refreshTeamOddityBanner = function () {
+    var bar = document.getElementById("team-oddity-top");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "team-oddity-top";
+      bar.style.cssText = "font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;letter-spacing:0.06em;padding:0.4rem 1rem;border-bottom:1px solid #c47b2b55;background:#1a140c;color:#e8dcc8;pointer-events:none;";
+      var header = document.querySelector(".console-header") || document.querySelector(".topbar");
+      if (header && header.parentNode) header.parentNode.insertBefore(bar, header.nextSibling);
+      else document.body.insertBefore(bar, document.body.firstChild);
+    }
+    var teams = (S.teams && S.teams.teams) || [];
+    if (!teams.length || !S.teamMemberCounts) {
+      bar.style.display = "none";
+      return;
+    }
+    var stso = Math.max(0, +(S.$("arch-stso") && S.$("arch-stso").value) || 1);
+    var ltso = Math.max(0, +(S.$("arch-ltso") && S.$("arch-ltso").value) || 0);
+    var tso = Math.max(0, +(S.$("arch-tso") && S.$("arch-tso").value) || 0);
+    var size = stso + ltso + tso;
+    var fillN = [], noLtso = [], sexN = [];
+    teams.forEach(function (t) {
+      var c = S.teamMemberCounts(t);
+      var name = t.name || t.id;
+      if (size && c.total / size < 0.7) fillN.push(name);
+      if (ltso > 0 && (c.LTSO.M + c.LTSO.F) < 1) noLtso.push(name);
+      var m = c.STSO.M + c.LTSO.M + c.TSO.M;
+      var f = c.STSO.F + c.LTSO.F + c.TSO.F;
+      if (m + f >= 3 && Math.abs(m - f) / (m + f) >= 0.4) sexN.push(name);
+    });
+    bar.style.display = "block";
+    if (!fillN.length && !noLtso.length && !sexN.length) {
+      bar.style.color = "#b7c9b0";
+      bar.textContent = "TEAMS CHECK  OK  ·  " + teams.length + " team(s)";
+      return;
+    }
+    bar.style.color = "#e8dcc8";
+    var parts = [];
+    if (fillN.length) parts.push(fillN.length + " under 70% (" + fillN.join(", ") + ")");
+    if (noLtso.length) parts.push(noLtso.length + " no LTSO (" + noLtso.join(", ") + ")");
+    if (sexN.length) parts.push(sexN.length + " sex split (" + sexN.join(", ") + ")");
+    bar.textContent = "TEAMS CHECK  " + parts.join("   ·   ");
+  };
+
+  if (typeof S.renderTeams === "function" && !S.renderTeams._oddTop) {
+    var origRT = S.renderTeams;
+    S.renderTeams = function () {
+      origRT.apply(this, arguments);
+      try { S.refreshTeamOddityBanner(); } catch (err) {}
+    };
+    S.renderTeams._oddTop = true;
   }
 })(window.Scheduler);
