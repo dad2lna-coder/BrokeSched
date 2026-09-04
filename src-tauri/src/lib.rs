@@ -66,6 +66,22 @@ fn ensure_dir(path: &PathBuf) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format!("Cannot create {}: {}", path.display(), e))
 }
 
+fn sanitize_airport(code: &str) -> String {
+    code.chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .map(|c| c.to_ascii_uppercase())
+        .take(3)
+        .collect()
+}
+
+fn airport_dir(code: &str) -> Result<PathBuf, String> {
+    let c = sanitize_airport(code);
+    if c.len() != 3 {
+        return Err("Airport code must be 3 letters".into());
+    }
+    Ok(find_schedule_builder().join(c))
+}
+
 fn update_dir() -> PathBuf {
     find_schedule_builder().join("BLADE-Update")
 }
@@ -140,18 +156,27 @@ fn shared_folder_path() -> Result<String, String> {
         let _ = fs::write(
             readme,
             "Drop a newer BLADE installer here, named like:\r\n\
-BLADE_0.2.4_x64-setup.exe\r\n\
-\r\nEach installed copy checks this folder on launch and starts the newer installer automatically.\r\n",
+BLADE_0.2.4_x64-setup.exe\r\n",
         );
     }
     Ok(root.display().to_string())
 }
 
 #[tauri::command]
-fn write_shared_bytes(filename: String, bytes: Vec<u8>) -> Result<String, String> {
-    let root = find_schedule_builder();
-    ensure_dir(&root)?;
-    let dest = root.join(filename);
+fn ensure_airport_folder(airport: String) -> Result<String, String> {
+    let dir = airport_dir(&airport)?;
+    ensure_dir(&dir)?;
+    Ok(dir.display().to_string())
+}
+
+#[tauri::command]
+fn write_shared_bytes(filename: String, bytes: Vec<u8>, airport: Option<String>) -> Result<String, String> {
+    let dest_dir = match airport {
+        Some(code) if sanitize_airport(&code).len() == 3 => airport_dir(&code)?,
+        _ => find_schedule_builder(),
+    };
+    ensure_dir(&dest_dir)?;
+    let dest = dest_dir.join(filename);
     fs::write(&dest, bytes).map_err(|e| e.to_string())?;
     Ok(dest.display().to_string())
 }
@@ -190,6 +215,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_operator,
             shared_folder_path,
+            ensure_airport_folder,
             write_shared_bytes,
             apply_share_update
         ])
