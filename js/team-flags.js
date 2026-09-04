@@ -1,4 +1,4 @@
-/** Team oddity flags: fill <70%, missing LTSO, sex split. */
+/** Team oddity flags: fill <70%, missing LTSO, sex split — stats list + forming cards. */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -41,12 +41,12 @@ window.Scheduler = window.Scheduler || {};
 
   function flagHtml(flags) {
     if (!flags.length) return "";
-    return flags.map(function (f) {
+    return '<div class="team-oddity-row">' + flags.map(function (f) {
       var color = f.tone === "bad" ? "#c45c4a" : "#c47b2b";
-      return '<span style="display:inline-block;margin-left:0.35rem;padding:0.05rem 0.35rem;border:1px solid ' +
+      return '<span class="team-oddity-pill" style="display:inline-block;margin:0.15rem 0.25rem 0 0;padding:0.08rem 0.4rem;border:1px solid ' +
         color + ";color:" + color + ';font-size:0.72rem;letter-spacing:0.04em">' +
         f.label + "</span>";
-    }).join("");
+    }).join("") + "</div>";
   }
 
   function wrapStats() {
@@ -82,10 +82,52 @@ window.Scheduler = window.Scheduler || {};
     S.renderTeamStats._oddWrapped = true;
   }
 
+  function wrapCards() {
+    if (typeof S.teamSummaryCardHtml !== "function" || S.teamSummaryCardHtml._oddWrapped) return;
+    var orig = S.teamSummaryCardHtml;
+    S.teamSummaryCardHtml = function (t) {
+      var html = orig.apply(this, arguments);
+      var flags = S.teamOddities(t);
+      if (!flags.length) return html;
+      return html.replace("</div></div>", flagHtml(flags) + "</div></div>");
+    };
+    S.teamSummaryCardHtml._oddWrapped = true;
+  }
+
+  function stampExistingCards() {
+    document.querySelectorAll(".team-summary-card[data-summary-team]").forEach(function (el) {
+      if (el.querySelector(".team-oddity-row")) return;
+      var id = el.getAttribute("data-summary-team");
+      var team = S.getTeamById ? S.getTeamById(id) : null;
+      var flags = S.teamOddities(team);
+      if (!flags.length) return;
+      el.insertAdjacentHTML("beforeend", flagHtml(flags));
+    });
+    document.querySelectorAll("#team-boards .team-board, #team-boards [data-team-id]").forEach(function () {});
+  }
+
+  function wrapBoards() {
+    if (typeof S.renderTeamBoards !== "function" || S.renderTeamBoards._oddWrapped) return;
+    var orig = S.renderTeamBoards;
+    S.renderTeamBoards = function () {
+      var r = orig.apply(this, arguments);
+      stampExistingCards();
+      return r;
+    };
+    S.renderTeamBoards._oddWrapped = true;
+  }
+
   function init() {
     wrapStats();
-    setTimeout(wrapStats, 0);
-    if (S.renderTeamStats) S.renderTeamStats();
+    wrapCards();
+    wrapBoards();
+    setTimeout(function () {
+      wrapStats();
+      wrapCards();
+      wrapBoards();
+      if (S.renderTeamStats) S.renderTeamStats();
+      if (S.renderTeamBoards) S.renderTeamBoards();
+    }, 0);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
