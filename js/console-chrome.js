@@ -66,7 +66,7 @@ window.Scheduler = window.Scheduler || {};
   };
 
   S.writeSharedFile = function (blob, filename) {
-    if (S.updateStatus) S.updateStatus("Writing " + filename + "\u2026");
+    if (S.updateStatus) S.updateStatus("Writing " + filename + "...");
     return blob.arrayBuffer().then(function (buf) {
       return invoke("write_shared_bytes", {
         filename: filename,
@@ -84,25 +84,20 @@ window.Scheduler = window.Scheduler || {};
 
   function captureAndShare(runFn, kind, ext) {
     var captured = null;
+    var done = false;
     var origCreate = URL.createObjectURL;
-    URL.createObjectURL = function (blob) {
-      captured = blob;
-      return origCreate.call(URL, blob);
-    };
     var proto = HTMLAnchorElement.prototype;
     var origClick = proto.click;
-    proto.click = function () {
-      if (S.isTauri() && captured) return;
-      return origClick.apply(this, arguments);
-    };
-    var result;
-    try {
-      result = runFn();
-    } finally {
+
+    function cleanup() {
       URL.createObjectURL = origCreate;
-    }
-    function finish(blob) {
       proto.click = origClick;
+    }
+
+    function finish(blob) {
+      if (done) return;
+      done = true;
+      cleanup();
       if (!blob) {
         if (S.updateStatus) S.updateStatus("Export produced no file.");
         return;
@@ -127,13 +122,32 @@ window.Scheduler = window.Scheduler || {};
       origClick.call(a);
       document.body.removeChild(a);
     }
-    if (result && typeof result.then === "function") {
-      return result.then(function () { return finish(captured); }).catch(function (err) {
-        proto.click = origClick;
-        if (S.updateStatus) S.updateStatus("Export failed: " + err);
-      });
+
+    URL.createObjectURL = function (blob) {
+      captured = blob;
+      var url = origCreate.call(URL, blob);
+      setTimeout(function () { finish(captured); }, 0);
+      return url;
+    };
+    proto.click = function () {
+      if (S.isTauri() && captured) return;
+      return origClick.apply(this, arguments);
+    };
+
+    try {
+      runFn();
+    } catch (err) {
+      cleanup();
+      if (S.updateStatus) S.updateStatus("Export failed: " + err);
+      return;
     }
-    return finish(captured);
+    setTimeout(function () {
+      if (!done && captured) finish(captured);
+      else if (!done) {
+        cleanup();
+        if (S.updateStatus) S.updateStatus("Export timed out waiting for file.");
+      }
+    }, 20000);
   }
 
   function rebindButton(id, fn) {
