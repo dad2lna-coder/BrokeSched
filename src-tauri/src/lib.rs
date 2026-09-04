@@ -38,8 +38,24 @@ fn find_onedrive_root() -> PathBuf {
     preferred
 }
 
-fn share_root() -> PathBuf {
-    find_onedrive_root().join("Schedule Builder")
+fn find_schedule_builder() -> PathBuf {
+    let od = find_onedrive_root();
+    let preferred = od.join("Schedule Builder");
+    if preferred.is_dir() {
+        return preferred;
+    }
+    if let Ok(rd) = fs::read_dir(&od) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+                if name.contains("schedule") && name.contains("builder") {
+                    return path;
+                }
+            }
+        }
+    }
+    preferred
 }
 
 fn ensure_dir(path: &PathBuf) -> Result<(), String> {
@@ -49,24 +65,6 @@ fn ensure_dir(path: &PathBuf) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format!("Cannot create {}: {}", path.display(), e))
 }
 
-fn ensure_share_tree() -> Result<PathBuf, String> {
-    let root = share_root();
-    ensure_dir(&root)?;
-    ensure_dir(&root.join("Config"))?;
-    ensure_dir(&root.join("Lines"))?;
-    Ok(root)
-}
-
-fn dest_for_filename(filename: &str) -> PathBuf {
-    let root = share_root();
-    let lower = filename.to_ascii_lowercase();
-    if lower.contains("_lines_") || lower.ends_with(".xlsx") {
-        root.join("Lines").join(filename)
-    } else {
-        root.join("Config").join(filename)
-    }
-}
-
 #[tauri::command]
 fn get_operator() -> String {
     username()
@@ -74,17 +72,16 @@ fn get_operator() -> String {
 
 #[tauri::command]
 fn shared_folder_path() -> Result<String, String> {
-    let root = ensure_share_tree()?;
+    let root = find_schedule_builder();
+    ensure_dir(&root)?;
     Ok(root.display().to_string())
 }
 
 #[tauri::command]
 fn write_shared_bytes(filename: String, bytes: Vec<u8>) -> Result<String, String> {
-    ensure_share_tree()?;
-    let dest = dest_for_filename(&filename);
-    if let Some(parent) = dest.parent() {
-        ensure_dir(&parent.to_path_buf())?;
-    }
+    let root = find_schedule_builder();
+    ensure_dir(&root)?;
+    let dest = root.join(filename);
     fs::write(&dest, bytes).map_err(|e| e.to_string())?;
     Ok(dest.display().to_string())
 }
