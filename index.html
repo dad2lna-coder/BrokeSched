@@ -52,9 +52,7 @@
       <button class="btn btn-red" id="btn-clear">[CLR] CLEAR</button>
     </div>
   </header>
-
   <div class="status" id="status">Loading…</div>
-
   <nav class="tabs">
     <button class="tab-btn active" data-tab="setup">[F1] SETUP</button>
     <button class="tab-btn" data-tab="coverage">[F2] COVERAGE</button>
@@ -62,7 +60,6 @@
     <button class="tab-btn" data-tab="teams">[F4] TEAMS</button>
     <button class="tab-btn" data-tab="reports">[F5] REPORTS</button>
   </nav>
-
   <main>
     <section class="panel active" id="tab-setup">
       <div class="card">
@@ -132,7 +129,6 @@
       </div>
       <div id="issues"></div>
     </section>
-
     <section class="panel" id="tab-coverage">
       <div class="card">
         <div class="section-title">30-minute headcount by day of week (Sun–Sat)</div>
@@ -168,7 +164,6 @@
         </table>
       </div>
     </section>
-
     <section class="panel" id="tab-lines">
       <div class="card">
         <div class="section-title">Bid lines</div>
@@ -227,7 +222,6 @@
         </div>
       </div>
     </section>
-
     <section class="panel" id="tab-teams">
       <div class="card">
         <div class="section-title">Team forming</div>
@@ -256,7 +250,6 @@
         <div id="team-boards" class="team-boards"></div>
       </div>
     </section>
-
     <section class="panel" id="tab-reports">
       <div class="card">
         <div class="section-title">Management reports</div>
@@ -273,7 +266,6 @@
       <div class="card"><div id="report-gender"></div></div>
     </section>
   </main>
-
   <div id="team-follow-docks" class="team-follow-docks" hidden>
     <div id="team-stats-dock" class="team-float-panel team-stats-dock card" data-float="stats">
       <div class="float-panel-head" data-drag-handle>
@@ -290,7 +282,6 @@
       <div id="team-boards-follow" class="team-boards team-boards-follow"></div>
     </div>
   </div>
-
   <div id="airport-config-modal" class="modal">
     <div class="modal-content">
       <span class="modal-close" id="modal-close-btn">&times;</span>
@@ -314,7 +305,6 @@
       </div>
     </div>
   </div>
-
   <div id="func-coverage-modal" class="modal">
     <div class="modal-content" style="max-width:920px">
       <span class="modal-close" id="func-coverage-close">&times;</span>
@@ -346,7 +336,6 @@
       </div>
     </div>
   </div>
-
   <div id="shift-day-times-modal" class="modal">
     <div class="modal-content" style="max-width:580px">
       <span class="modal-close" id="shift-day-times-close">&times;</span>
@@ -362,7 +351,6 @@
       </div>
     </div>
   </div>
-
   <div id="team-detail-modal" class="modal">
     <div class="modal-content" style="max-width:720px">
       <span class="modal-close" id="team-detail-close">&times;</span>
@@ -370,7 +358,6 @@
       <div id="team-detail-content"></div>
     </div>
   </div>
-
 <div id="instructions-modal" class="modal">
   <div class="modal-content">
     <span class="modal-close" id="instructions-modal-close">&times;</span>
@@ -380,7 +367,6 @@
     <div id="instructions-content" class="instructions-container" style="max-height:70vh;overflow:auto;white-space:pre-wrap"></div>
   </div>
 </div>
-
   <footer class="console-footer">
     <span>SYSTEM STATUS: <b>READY</b></span>
     <span>LINES GENERATED: <b id="console-lines">0</b></span>
@@ -388,7 +374,6 @@
     <span>SELECT: ENTER</span>
     <span>HELP: INSTRUCTIONS</span>
   </footer>
-
   <script src="lib/dayjs.min.js?v=20260902i"></script>
   <script src="lib/Sortable.min.js?v=20260902i"></script>
   <script src="lib/luxon.min.js?v=20260902i"></script>
@@ -410,6 +395,10 @@
   <script src="js/instructions.js?v=20260903a"></script>
   <script src="js/main.js?v=20260904a"></script>
   <script src="js/console-chrome.js?v=20260904c"></script>
-  <script src="js/intro.js?v=20260904a"></script>
+  <script src="js/intro.js?v=20260904m"></script>
+  <script src="js/team-form-smart.js?v=20260904m"></script>
+  <script src="js/coverage-cuts.js?v=20260904m"></script>
+  <script src="js/team-flags.js?v=20260904m"></script>
+  <script src="js/team-close.js?v=20260904m"></script>
 </body>
 </html>
