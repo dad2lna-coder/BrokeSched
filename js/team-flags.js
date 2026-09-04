@@ -1,4 +1,4 @@
-/** Team oddity flags + top-of-page summary. */
+/** Top-of-page team oddity check. Does not rewrite team cards (keeps Sortable intact). */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -12,21 +12,21 @@ window.Scheduler = window.Scheduler || {};
 
   S.teamOddities = function (team) {
     var flags = [];
-    if (!team) return flags;
+    if (!team || !S.teamMemberCounts) return flags;
     var c = S.teamMemberCounts(team);
     var arch = archTarget();
     var fill = arch.size ? c.total / arch.size : 1;
     if (arch.size && fill < 0.7) {
-      flags.push({ code: "FILL", label: Math.round(fill * 100) + "% filled", tone: "warn" });
+      flags.push({ code: "FILL", label: Math.round(fill * 100) + "% filled" });
     }
     if (arch.ltso > 0 && (c.LTSO.M + c.LTSO.F) < 1) {
-      flags.push({ code: "NOLTSO", label: "no LTSO", tone: "bad" });
+      flags.push({ code: "NOLTSO", label: "no LTSO" });
     }
     var m = c.STSO.M + c.LTSO.M + c.TSO.M;
     var f = c.STSO.F + c.LTSO.F + c.TSO.F;
     var tot = m + f;
     if (tot >= 3 && Math.abs(m - f) / tot >= 0.4) {
-      flags.push({ code: "SEX", label: m + "M/" + f + "F", tone: Math.abs(m - f) / tot >= 0.6 ? "bad" : "warn" });
+      flags.push({ code: "SEX", label: m + "M/" + f + "F" });
     }
     return flags;
   };
@@ -49,9 +49,8 @@ window.Scheduler = window.Scheduler || {};
     if (existing) return existing;
     var bar = document.createElement("div");
     bar.id = "team-oddity-top";
-    bar.setAttribute("role", "status");
-    bar.style.cssText = "font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;letter-spacing:0.06em;padding:0.4rem 1rem;border-bottom:1px solid #c47b2b55;background:#1a140c;color:#e8dcc8;";
-    var header = document.querySelector(".console-header") || document.querySelector("header") || document.body.firstElementChild;
+    bar.style.cssText = "font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;letter-spacing:0.06em;padding:0.4rem 1rem;border-bottom:1px solid #c47b2b55;background:#1a140c;color:#e8dcc8;pointer-events:none;";
+    var header = document.querySelector(".console-header");
     if (header && header.parentNode) header.parentNode.insertBefore(bar, header.nextSibling);
     else document.body.insertBefore(bar, document.body.firstChild);
     return bar;
@@ -82,28 +81,19 @@ window.Scheduler = window.Scheduler || {};
     bar.textContent = "TEAMS CHECK  " + parts.join("   ·   ");
   };
 
-  function hook(name) {
-    if (typeof S[name] !== "function" || S[name]._oddTop) return;
-    var orig = S[name];
-    S[name] = function () {
-      var r = orig.apply(this, arguments);
-      S.refreshTeamOddityBanner();
-      return r;
+  function hookRenderTeams() {
+    if (typeof S.renderTeams !== "function" || S.renderTeams._oddTop) return;
+    var orig = S.renderTeams;
+    S.renderTeams = function () {
+      orig.apply(this, arguments);
+      try { S.refreshTeamOddityBanner(); } catch (e) {}
     };
-    S[name]._oddTop = true;
+    S.renderTeams._oddTop = true;
   }
 
   function init() {
-    hook("renderTeams");
-    hook("renderTeamStats");
-    hook("renderAll");
-    hook("autoFormTeams");
-    setTimeout(function () {
-      hook("renderTeams");
-      hook("renderTeamStats");
-      hook("renderAll");
-      S.refreshTeamOddityBanner();
-    }, 0);
+    hookRenderTeams();
+    setTimeout(hookRenderTeams, 0);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
