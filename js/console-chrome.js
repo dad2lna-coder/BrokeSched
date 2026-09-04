@@ -6,32 +6,29 @@ window.Scheduler = window.Scheduler || {};
   var LS_AIRPORT = "blade.airportCode";
   var LS_OPERATOR = "blade.operator";
   var LS_FOLDER = "blade.sharedFolderHint";
-
-  S.AIRPORTS = [
-    { code: "DAL", name: "Dallas Love Field" },
-    { code: "DFW", name: "Dallas/Fort Worth" },
-    { code: "AUS", name: "Austin-Bergstrom" },
-    { code: "IAH", name: "Houston Intercontinental" },
-    { code: "HOU", name: "Houston Hobby" },
-    { code: "SAT", name: "San Antonio" },
-    { code: "ELP", name: "El Paso" },
-    { code: "OKC", name: "Will Rogers" },
-    { code: "TUL", name: "Tulsa" },
-    { code: "LIT", name: "Little Rock" }
-  ];
+  var SHARED_REL = "OneDrive - USTSA\\Schedule Builder";
 
   function $(id) { return document.getElementById(id); }
   function pad(n) { return n < 10 ? "0" + n : String(n); }
 
+  function fileSafe(name) {
+    return String(name || "OPERATOR").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "OPERATOR";
+  }
+
   S.getAirportCode = function () {
-    var st = (S.state && S.state.airportCode) || localStorage.getItem(LS_AIRPORT) || "DAL";
-    return String(st).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "DAL";
+    var st = (S.state && S.state.airportCode) || localStorage.getItem(LS_AIRPORT) || "";
+    return String(st).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
   };
   S.setAirportCode = function (code) {
-    var c = String(code || "DAL").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "DAL";
+    var c = String(code || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
     if (!S.state) S.state = {};
     S.state.airportCode = c;
     try { localStorage.setItem(LS_AIRPORT, c); } catch (e) {}
+    var el = $("console-airport");
+    if (el) {
+      if (el.tagName === "SELECT" || el.tagName === "INPUT") el.value = c;
+      else el.textContent = c || "—";
+    }
     return c;
   };
   S.getOperator = function () {
@@ -51,7 +48,9 @@ window.Scheduler = window.Scheduler || {};
     return pad(d.getMonth() + 1) + pad(d.getDate()) + d.getFullYear();
   };
   S.exportFileName = function (kind, ext) {
-    return S.getAirportCode() + "_" + (kind || "Config") + "_" + S.exportDateStamp() + (ext || ".json");
+    var code = S.getAirportCode() || "XXX";
+    var user = fileSafe(S.getOperator());
+    return code + "_" + user + "_" + (kind || "Config") + "_" + S.exportDateStamp() + (ext || ".json");
   };
   S.isTauri = function () {
     return !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
@@ -65,6 +64,14 @@ window.Scheduler = window.Scheduler || {};
     return Promise.resolve(S.getOperator());
   };
 
+  S.sharedFolderPath = function () {
+    var user = fileSafe(S.getOperator());
+    if (S.isTauri() && user && user !== "OPERATOR") {
+      return "C:\\Users\\" + user + "\\" + SHARED_REL;
+    }
+    return localStorage.getItem(LS_FOLDER) || "";
+  };
+
   var dirHandle = null;
   S.pickSharedFolder = async function () {
     if (!window.showDirectoryPicker) {
@@ -72,7 +79,7 @@ window.Scheduler = window.Scheduler || {};
       return null;
     }
     dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
-    try { localStorage.setItem(LS_FOLDER, dirHandle.name || "shared-folder"); } catch (e) {}
+    try { localStorage.setItem(LS_FOLDER, dirHandle.name || "Schedule Builder"); } catch (e) {}
     if (S.updateStatus) S.updateStatus("Shared folder linked: " + dirHandle.name);
     return dirHandle;
   };
@@ -89,51 +96,27 @@ window.Scheduler = window.Scheduler || {};
       (st.ltsoM || 0) + (st.ltsoF || 0) + (st.stsoM || 0) + (st.stsoF || 0);
   }
 
-  function ensureAirportSelect() {
+  function paintAirport() {
     var el = $("console-airport");
     if (!el) return;
-    var sel = el;
-    if (el.tagName !== "SELECT") {
-      sel = document.createElement("select");
-      sel.id = "console-airport";
-      sel.title = "Airport";
-      el.parentNode.replaceChild(sel, el);
+    var code = S.getAirportCode() || "—";
+    if (el.tagName === "SELECT") {
+      var b = document.createElement("b");
+      b.id = "console-airport";
+      b.textContent = code;
+      el.parentNode.replaceChild(b, el);
+      return;
     }
-    if (!sel.options.length) {
-      S.AIRPORTS.forEach(function (ap) {
-        var opt = document.createElement("option");
-        opt.value = ap.code;
-        opt.textContent = ap.code;
-        opt.title = ap.name;
-        sel.appendChild(opt);
-      });
-    }
-    sel.value = S.getAirportCode();
-    if (!sel._bound) {
-      sel.addEventListener("change", function () { S.setAirportCode(sel.value); });
-      sel._bound = true;
-    }
+    el.textContent = code;
   }
 
-  function ensureOperatorAndFolder() {
+  function ensureOperator() {
     var airportMeta = $("console-airport") && $("console-airport").closest(".console-meta");
     if (airportMeta && !$("console-operator")) {
       var wrap = document.createElement("div");
       wrap.className = "console-meta";
       wrap.innerHTML = 'OPERATOR: <b id="console-operator">' + S.getOperator() + "</b>";
       airportMeta.parentNode.insertBefore(wrap, airportMeta.nextSibling);
-    }
-    if ($("btn-import") && !$("btn-link-folder")) {
-      var btn = document.createElement("button");
-      btn.className = "btn";
-      btn.id = "btn-link-folder";
-      btn.type = "button";
-      btn.textContent = "[DIR] SHARED FOLDER";
-      $("btn-import").insertAdjacentElement("afterend", btn);
-      btn.addEventListener("click", function () { S.pickSharedFolder(); });
-    } else if ($("btn-link-folder") && !$("btn-link-folder")._bound) {
-      $("btn-link-folder").addEventListener("click", function () { S.pickSharedFolder(); });
-      $("btn-link-folder")._bound = true;
     }
   }
 
@@ -158,7 +141,7 @@ window.Scheduler = window.Scheduler || {};
     if ($("console-staff")) $("console-staff").textContent = String(staffTotal());
     if ($("console-lines")) $("console-lines").textContent = String((st.lines && st.lines.length) || 0);
     if ($("console-operator")) $("console-operator").textContent = S.getOperator();
-    ensureAirportSelect();
+    paintAirport();
   }
 
   function init() {
@@ -168,8 +151,8 @@ window.Scheduler = window.Scheduler || {};
     tickClock();
     setInterval(tickClock, 1000);
     wrapExports();
-    ensureAirportSelect();
-    ensureOperatorAndFolder();
+    paintAirport();
+    ensureOperator();
     refreshHeader();
     S.detectOperator().then(refreshHeader);
     document.addEventListener("keydown", function (e) {
