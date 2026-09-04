@@ -16,8 +16,8 @@ window.Scheduler = window.Scheduler || {};
   }
 
   function windowOf(node, parent) {
-    var start = toMin(node && node.startTime || (parent && parent.startTime) || cfg().startTime || "03:30");
-    var end = toMin(node && node.endTime || (parent && parent.endTime) || cfg().endTime || "23:00");
+    var start = toMin((node && node.startTime) || (parent && parent.startTime) || cfg().startTime || "03:30");
+    var end = toMin((node && node.endTime) || (parent && parent.endTime) || cfg().endTime || "23:00");
     if (end <= start) end += 1440;
     return { start: start, end: end };
   }
@@ -28,17 +28,34 @@ window.Scheduler = window.Scheduler || {};
     });
   }
 
-  function activeModSet(cp, term, slotMin) {
+  /** Every mod set is its own lane group. They add; they do not replace. */
+  function openModSets(cp, term, slotMin) {
     var win = windowOf(cp, term);
-    if (slotMin < win.start || slotMin >= win.end) return null;
-    var sets = sortedModSets(cp);
-    if (!sets.length) return null;
-    var found = null;
-    for (var i = 0; i < sets.length; i++) {
-      var msStart = toMin(sets[i].startTime || cp.startTime);
-      if (msStart <= slotMin) found = sets[i];
-    }
-    return found;
+    if (slotMin < win.start || slotMin >= win.end) return [];
+    return sortedModSets(cp).filter(function (ms) {
+      var start = toMin(ms.startTime || cp.startTime);
+      var end = ms.endTime ? toMin(ms.endTime) : win.end;
+      if (end <= start) end += 1440;
+      return start <= slotMin && slotMin < end;
+    });
+  }
+
+  function tallySets(sets) {
+    var lanes = 0;
+    var byProgram = { STD: 0, PRE: 0, MIX: 0 };
+    (sets || []).forEach(function (ms) {
+      var n = Number(ms.lanes);
+      if (!n && n !== 0) n = 2;
+      lanes += n;
+      var p = ms.program || "STD";
+      if (byProgram[p] == null) byProgram[p] = 0;
+      byProgram[p] += n;
+    });
+    return { lanes: lanes, byProgram: byProgram, sets: sets || [] };
+  }
+
+  function physicalPlant(cp) {
+    return tallySets(cp.modSets || []);
   }
 
   S.capacitySlots = function () {
@@ -62,17 +79,17 @@ window.Scheduler = window.Scheduler || {};
       if (terminalId != null && String(term.id) !== String(terminalId) && term.name !== terminalId) return;
       (term.checkpoints || []).forEach(function (cp) {
         if (checkpointId != null && String(cp.id) !== String(checkpointId) && cp.name !== checkpointId) return;
-        var ms = activeModSet(cp, term, slot);
-        var lanes = ms ? (Number(ms.lanes) || 0) : 0;
-        total += lanes;
+        var t = tallySets(openModSets(cp, term, slot));
+        total += t.lanes;
         hits.push({
           terminalId: term.id,
           terminal: term.name,
           checkpointId: cp.id,
           checkpoint: cp.name,
-          lanes: lanes,
-          program: ms ? (ms.program || "STD") : null,
-          modSetId: ms ? ms.id : null
+          lanes: t.lanes,
+          plant: physicalPlant(cp).lanes,
+          byProgram: t.byProgram,
+          modSetCount: t.sets.length
         });
       });
     });
@@ -83,14 +100,19 @@ window.Scheduler = window.Scheduler || {};
     var c = cfg();
     var slots = S.capacitySlots();
     var columns = [];
+    var plantAirport = 0;
     (c.terminals || []).forEach(function (term) {
       (term.checkpoints || []).forEach(function (cp) {
+        var plant = physicalPlant(cp).lanes;
+        plantAirport += plant;
         columns.push({
           key: "t" + term.id + "c" + cp.id,
           terminalId: term.id,
           terminal: term.name,
           checkpointId: cp.id,
-          checkpoint: cp.name
+          checkpoint: cp.name,
+          plant: plant,
+          sets: (cp.modSets || []).length
         });
       });
     });
@@ -102,16 +124,12 @@ window.Scheduler = window.Scheduler || {};
       (c.terminals || []).forEach(function (term) {
         var termTot = 0;
         (term.checkpoints || []).forEach(function (cp) {
-          var ms = activeModSet(cp, term, slot);
-          var lanes = ms ? (Number(ms.lanes) || 0) : 0;
-          var prog = ms ? (ms.program || "STD") : null;
-          cells["t" + term.id + "c" + cp.id] = {
-            lanes: lanes,
-            program: prog,
-            modSetId: ms ? ms.id : null
-          };
-          termTot += lanes;
-          if (prog && byProgram[prog] != null) byProgram[prog] += lanes;
+          var t = tallySets(openModSets(cp, term, slot));
+          cells["t" + term.id + "c" + cp.id] = t;
+          termTot += t.lanes;
+          byProgram.STD += t.byProgram.STD;
+          byProgram.PRE += t.byProgram.PRE;
+          byProgram.MIX += t.byProgram.MIX;
         });
         byTerm[term.id] = termTot;
         airport += termTot;
@@ -138,7 +156,8 @@ window.Scheduler = window.Scheduler || {};
       terminals: (c.terminals || []).map(function (t) { return { id: t.id, name: t.name }; }),
       rows: rows,
       peak: peak,
-      minOpen: minOpen
+      minOpen: minOpen,
+      plantAirport: plantAirport
     };
   };
 
@@ -150,6 +169,14 @@ window.Scheduler = window.Scheduler || {};
     if (n >= peak) return "hc-high";
     if (n <= peak * 0.4) return "hc-low";
     return "hc-ok";
+  }
+
+  function progLabel(bp) {
+    var parts = [];
+    if (bp.STD) parts.push(bp.STD + " STD");
+    if (bp.PRE) parts.push(bp.PRE + " PRE");
+    if (bp.MIX) parts.push(bp.MIX + " MIX");
+    return parts.join(" / ");
   }
 
   S.renderCapacity = function () {
@@ -172,7 +199,8 @@ window.Scheduler = window.Scheduler || {};
         lastTerm = col.terminal;
         head += '<th class="muted">' + col.terminal + "</th>";
       }
-      head += "<th>" + col.checkpoint + "</th>";
+      head += "<th>" + col.checkpoint + "<div class=\"muted\">plant " + col.plant +
+        " / " + col.sets + " sets</div></th>";
     });
     head += "<th>Airport</th><th>STD</th><th>PRE</th><th>MIX</th></tr>";
     var body;
@@ -188,14 +216,14 @@ window.Scheduler = window.Scheduler || {};
             html += '<td class="' + heat(r.byTerminal[col.terminalId] || 0, matrix.peak) + '"><strong>' +
               (r.byTerminal[col.terminalId] || 0) + "</strong></td>";
           }
-          var cell = r.cells[col.key] || { lanes: 0, program: null };
-          var title = cell.program ? cell.program + " · " + cell.lanes + " lanes" : "closed";
+          var cell = r.cells[col.key] || { lanes: 0, byProgram: {} };
+          var title = cell.lanes ? progLabel(cell.byProgram) : "closed";
           html += '<td class="' + heat(cell.lanes, matrix.peak) + '" title="' + title + '">' +
             (cell.lanes || "") +
-            (cell.program && cell.lanes ? '<div class="muted">' + cell.program + "</div>" : "") +
+            (cell.lanes ? '<div class="muted">' + progLabel(cell.byProgram) + "</div>" : "") +
             "</td>";
         });
-        html += '<td><strong>' + r.airport + "</strong></td>";
+        html += "<td><strong>" + r.airport + "</strong></td>";
         html += "<td>" + r.byProgram.STD + "</td><td>" + r.byProgram.PRE + "</td><td>" + r.byProgram.MIX + "</td>";
         return "<tr>" + html + "</tr>";
       }).join("");
@@ -220,9 +248,8 @@ window.Scheduler = window.Scheduler || {};
     if (S.$("capacity-matrix-body")) S.$("capacity-matrix-body").innerHTML = body;
     if (S.$("capacity-summary")) {
       S.$("capacity-summary").textContent =
-        "Counts each open lane in the mod set covering that 30 minutes. " +
-        "A checkpoint is closed outside its hours. Peak airport lanes " + matrix.peak +
-        ", lowest open bucket " + matrix.minOpen + ".";
+        "Each mod set is a lane group (default 2, can drop to 1). Groups add. " +
+        "Physical plant " + matrix.plantAirport + " lanes. Open now peaks at " + matrix.peak + ".";
     }
     var sel = S.$("cap-filter-term");
     if (sel && !sel._capBound) {
