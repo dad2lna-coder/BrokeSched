@@ -1,6 +1,6 @@
 [package]
 name = "brokesched"
-version = "0.2.4"
+version = "0.2.5"
 description = "BLADE — offline airport staffing scheduler"
 authors = ["dad2lna"]
 edition = "2021"
