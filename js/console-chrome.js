@@ -48,6 +48,27 @@ window.Scheduler = window.Scheduler || {};
     }
   }
 
+  function wrapExports() {
+    function renameAnchor() {
+      var proto = HTMLAnchorElement.prototype;
+      if (proto.click._bladeWrapped) return;
+      var origClick = proto.click;
+      proto.click = function () {
+        var name = this.download || "";
+        if (S.exportFileName) {
+          if (name.indexOf("scheduler-pre-v4-export") === 0 || /\.json$/i.test(name) && name.indexOf("scheduler") === 0) {
+            this.download = S.exportFileName("Config", ".json");
+          } else if (name.indexOf("scheduler-lines-") === 0 || /\.xlsx$/i.test(name) && name.indexOf("scheduler") === 0) {
+            this.download = S.exportFileName("Lines", ".xlsx");
+          }
+        }
+        return origClick.apply(this, arguments);
+      };
+      proto.click._bladeWrapped = true;
+    }
+    renameAnchor();
+  }
+
   function refreshHeader() {
     var st = S.state || {};
     var weeks = $("console-weeks");
@@ -79,6 +100,7 @@ window.Scheduler = window.Scheduler || {};
     tickClock();
     setInterval(tickClock, 1000);
     bindFkeys();
+    wrapExports();
     refreshHeader();
     if (S.detectOperator) S.detectOperator().then(refreshHeader);
     var linkBtn = $("btn-link-folder");
