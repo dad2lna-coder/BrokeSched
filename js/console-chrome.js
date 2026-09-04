@@ -27,7 +27,7 @@ window.Scheduler = window.Scheduler || {};
     S.state.airportCode = c;
     try { localStorage.setItem(LS_AIRPORT, c); } catch (e) {}
     var el = $("console-airport");
-    if (el) el.textContent = c || "—";
+    if (el) el.textContent = c || "\u2014";
     return c;
   };
   S.getOperator = function () {
@@ -134,7 +134,7 @@ window.Scheduler = window.Scheduler || {};
       wrap.innerHTML = 'OPERATOR: <b id="console-operator">' + S.getOperator() + "</b>";
       airportMeta.parentNode.insertBefore(wrap, airportMeta.nextSibling);
     }
-    if ($("console-airport")) $("console-airport").textContent = S.getAirportCode() || "—";
+    if ($("console-airport")) $("console-airport").textContent = S.getAirportCode() || "\u2014";
     if ($("console-operator")) $("console-operator").textContent = S.getOperator();
   }
   function refreshHeader() {
@@ -143,6 +143,12 @@ window.Scheduler = window.Scheduler || {};
     if ($("console-staff")) $("console-staff").textContent = String(staffTotal());
     if ($("console-lines")) $("console-lines").textContent = String((st.lines && st.lines.length) || 0);
     ensureOperatorChip();
+  }
+
+  function checkShareUpdate() {
+    invoke("apply_share_update").then(function (msg) {
+      if (S.updateStatus) S.updateStatus(String(msg));
+    }).catch(function () {});
   }
 
   function init() {
@@ -157,7 +163,9 @@ window.Scheduler = window.Scheduler || {};
     S.detectOperator().then(refreshHeader);
     invoke("shared_folder_path").then(function (p) {
       if (S.updateStatus) S.updateStatus("Share target: " + p);
+      checkShareUpdate();
     }).catch(function () {});
+    setInterval(checkShareUpdate, 15 * 60 * 1000);
     document.addEventListener("keydown", function (e) {
       if (e.defaultPrevented) return;
       var tag = (e.target && e.target.tagName) || "";
