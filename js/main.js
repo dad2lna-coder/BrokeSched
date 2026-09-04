@@ -26,9 +26,9 @@ window.Scheduler = window.Scheduler || {};
     if (instructionsBtn && instructionsModal && instructionsCloseBtn && instructionsContent) {
       function escapeHtml(str) {
         return String(str)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
+          .replace(/&/g, "&")
+          .replace(/</g, "<")
+          .replace(/>/g, ">");
       }
 
       function renderInstructions(text) {
@@ -41,7 +41,6 @@ window.Scheduler = window.Scheduler || {};
           renderInstructions(S.INSTRUCTIONS_MD);
           return;
         }
-        // Fallback when served over http:// (local server or GitHub Pages)
         if (typeof fetch !== "function" || location.protocol === "file:") {
           renderInstructions(
             "Instructions file is missing from this copy of the app.\n" +
@@ -71,17 +70,14 @@ window.Scheduler = window.Scheduler || {};
       instructionsBtn.addEventListener('click', showInstructions);
       instructionsCloseBtn.addEventListener('click', hideInstructions);
 
-      // Close the modal if the user clicks on the background overlay
       window.addEventListener('click', (event) => {
         if (event.target === instructionsModal) {
           hideInstructions();
         }
       });
     }
-    // --- End of Instructions Modal Logic ---
 
     if (S.$("btn-generate")) S.$("btn-generate").addEventListener("click", S.generate);
-
     if (S.$("btn-export")) S.$("btn-export").addEventListener("click", S.exportJson);
 
     if (S.$("btn-import")) {
@@ -163,7 +159,7 @@ window.Scheduler = window.Scheduler || {};
       if (btn) btn.addEventListener("click", onNewTeam);
     });
 
-    S.updateStatus("Scheduler Pre v2 — build 20260902h · Excel xlsx + BAG yellow");
+    S.updateStatus("BLADE Alpha Build — boot 20260904a");
     S.renderAll();
   }
 
