@@ -1,5 +1,6 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn username() -> String {
     std::env::var("USERNAME")
@@ -65,6 +66,64 @@ fn ensure_dir(path: &PathBuf) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format!("Cannot create {}: {}", path.display(), e))
 }
 
+fn update_dir() -> PathBuf {
+    find_schedule_builder().join("BLADE-Update")
+}
+
+fn parse_ver(s: &str) -> (u32, u32, u32) {
+    let mut parts = s
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|p| !p.is_empty())
+        .filter_map(|p| p.parse::<u32>().ok());
+    (
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+    )
+}
+
+fn ver_gt(a: (u32, u32, u32), b: (u32, u32, u32)) -> bool {
+    a > b
+}
+
+fn current_version() -> (u32, u32, u32) {
+    parse_ver(env!("CARGO_PKG_VERSION"))
+}
+
+fn version_from_name(name: &str) -> Option<(u32, u32, u32)> {
+    let lower = name.to_ascii_lowercase();
+    if !(lower.contains("blade") && (lower.ends_with(".exe") || lower.ends_with(".msi"))) {
+        return None;
+    }
+    Some(parse_ver(name))
+}
+
+fn newest_installer(dir: &Path) -> Option<(PathBuf, (u32, u32, u32))> {
+    let rd = fs::read_dir(dir).ok()?;
+    let mut best: Option<(PathBuf, (u32, u32, u32))> = None;
+    for entry in rd.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = path.file_name()?.to_string_lossy().to_string();
+        if let Some(ver) = version_from_name(&name) {
+            if best.as_ref().map(|b| ver_gt(ver, b.1)).unwrap_or(true) {
+                best = Some((path, ver));
+            }
+        }
+    }
+    best
+}
+
+fn launch_installer(path: &Path) -> Result<(), String> {
+    Command::new("cmd")
+        .args(["/C", "start", "", &path.display().to_string()])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 fn get_operator() -> String {
     username()
@@ -74,6 +133,17 @@ fn get_operator() -> String {
 fn shared_folder_path() -> Result<String, String> {
     let root = find_schedule_builder();
     ensure_dir(&root)?;
+    let updates = update_dir();
+    ensure_dir(&updates)?;
+    let readme = updates.join("DROP_NEW_INSTALLER_HERE.txt");
+    if !readme.exists() {
+        let _ = fs::write(
+            readme,
+            "Drop a newer BLADE installer here, named like:\r\n\
+BLADE_0.2.4_x64-setup.exe\r\n\
+\r\nEach installed copy checks this folder on launch and starts the newer installer automatically.\r\n",
+        );
+    }
     Ok(root.display().to_string())
 }
 
@@ -86,6 +156,33 @@ fn write_shared_bytes(filename: String, bytes: Vec<u8>) -> Result<String, String
     Ok(dest.display().to_string())
 }
 
+#[tauri::command]
+fn apply_share_update() -> Result<String, String> {
+    let _ = shared_folder_path()?;
+    let dir = update_dir();
+    let current = current_version();
+    match newest_installer(&dir) {
+        Some((path, ver)) if ver_gt(ver, current) => {
+            launch_installer(&path)?;
+            Ok(format!(
+                "Update {}.{}.{} found. Starting {}",
+                ver.0,
+                ver.1,
+                ver.2,
+                path.file_name().unwrap_or_default().to_string_lossy()
+            ))
+        }
+        Some((_, ver)) => Ok(format!(
+            "Share installer {}.{}.{} is not newer than this build {}.{}.{}",
+            ver.0, ver.1, ver.2, current.0, current.1, current.2
+        )),
+        None => Ok(format!(
+            "No installer in BLADE-Update (running {}.{}.{})",
+            current.0, current.1, current.2
+        )),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -93,7 +190,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_operator,
             shared_folder_path,
-            write_shared_bytes
+            write_shared_bytes,
+            apply_share_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running BLADE");
