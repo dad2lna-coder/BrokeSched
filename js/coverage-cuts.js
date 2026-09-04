@@ -1,4 +1,4 @@
-/** Flag shifts or time windows for a % coverage decrease by role and sex. */
+/** Coverage cuts: fewer matching lines on Generate. Shift times / RDOs / paid hours unchanged. */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -21,36 +21,76 @@ window.Scheduler = window.Scheduler || {};
     return m ? (+m[1]) * 60 + (+m[2]) : 0;
   }
 
-  function cutAppliesToLine(cut, line) {
-    if (!cut || !line) return false;
-    var role = S.lineRoleKey ? S.lineRoleKey(line) : "TSO";
+  function lineRole(line) {
+    if (S.lineRoleKey) return S.lineRoleKey(line);
+    if (line.isStso || line.empClass === "STSO") return "STSO";
+    if (line.isLtso || line.empClass === "LTSO") return "LTSO";
+    return "TSO";
+  }
+
+  function lineOverlapsWindow(line, cut) {
+    var days = cut.days && cut.days.length ? cut.days : [0, 1, 2, 3, 4, 5, 6];
+    var wa = parseMin(cut.start || "00:00");
+    var wb = parseMin(cut.end || "23:59");
+    return days.some(function (dow) {
+      if (!S.getShift(line.shiftId)) return false;
+      var times = S.getEffectiveShiftTimes
+        ? S.getEffectiveShiftTimes(line.shiftId, dow)
+        : { start: S.getShift(line.shiftId).start, end: S.getShift(line.shiftId).end };
+      var a = parseMin(times.start);
+      var b = parseMin(times.end);
+      return a < wb && b > wa;
+    });
+  }
+
+  function cutMatchesLine(cut, line) {
+    if (!cut || !cut.enabled || !line) return false;
+    var role = lineRole(line);
     if (cut.roles && cut.roles[role] === false) return false;
     var sx = line.sex === "F" ? "F" : "M";
     if (cut.sexes && cut.sexes[sx] === false) return false;
-    if (cut.kind === "shift" && cut.shiftId && line.shiftId !== cut.shiftId) return false;
-    return true;
+    if (cut.kind === "shift") return !cut.shiftId || line.shiftId === cut.shiftId;
+    return lineOverlapsWindow(line, cut);
   }
 
-  function cutAppliesToSlot(cut, slotMin, dow) {
-    if (cut.days && cut.days.length && cut.days.indexOf(dow) < 0) return false;
-    if (cut.kind === "window") {
-      var a = parseMin(cut.start || "00:00");
-      var b = parseMin(cut.end || "23:59");
-      return slotMin >= a && slotMin < b;
-    }
-    return true;
-  }
-
-  S.coverageCutFactor = function (line, slotMin, dow) {
-    var factor = 1;
-    ensureState().forEach(function (cut) {
-      if (!cut.enabled) return;
-      if (!cutAppliesToLine(cut, line)) return;
-      if (!cutAppliesToSlot(cut, slotMin, dow)) return;
+  /** Drop a % of matching lines. Remaining lines keep the same hours and RDOs. */
+  S.applyCoverageCutsToLines = function () {
+    var cuts = ensureState().filter(function (c) { return c.enabled && +c.pct > 0; });
+    var lines = (S.state && S.state.lines) || [];
+    if (!cuts.length || !lines.length) return 0;
+    var drop = {};
+    cuts.forEach(function (cut) {
       var pct = Math.max(0, Math.min(90, +cut.pct || 0));
-      factor *= (1 - pct / 100);
+      var bucket = {};
+      lines.forEach(function (line) {
+        if (drop[line.id]) return;
+        if (!cutMatchesLine(cut, line)) return;
+        var key = lineRole(line) + "|" + (line.sex === "F" ? "F" : "M") + "|" + (line.shiftId || "");
+        if (!bucket[key]) bucket[key] = [];
+        bucket[key].push(line);
+      });
+      Object.keys(bucket).forEach(function (key) {
+        var group = bucket[key].slice().sort(function (a, b) { return (b.id || 0) - (a.id || 0); });
+        var nDrop = Math.round(group.length * pct / 100);
+        if (nDrop < 1 && pct >= 10 && group.length >= 2) nDrop = 1;
+        group.slice(0, nDrop).forEach(function (line) { drop[line.id] = true; });
+      });
     });
-    return factor;
+    var kept = lines.filter(function (l) { return !drop[l.id]; });
+    var removed = lines.length - kept.length;
+    if (!removed) return 0;
+    S.state.lines = kept;
+    var days = (S.state.weekCount || 1) * 7;
+    var nextSched = {};
+    kept.forEach(function (line) {
+      if (S.state.schedule && S.state.schedule[line.id]) nextSched[line.id] = S.state.schedule[line.id];
+      else if (S.buildScheduleForLine) nextSched[line.id] = S.buildScheduleForLine(line, days);
+    });
+    S.state.schedule = nextSched;
+    if (S.state.issues) {
+      S.state.issues.push("Coverage cuts removed " + removed + " line(s). Hours/RDOs on remaining lines unchanged.");
+    }
+    return removed;
   };
 
   function injectPanel() {
@@ -61,7 +101,7 @@ window.Scheduler = window.Scheduler || {};
     card.id = "coverage-cuts-card";
     card.innerHTML =
       '<div class="section-title">Coverage cuts</div>' +
-      '<p class="muted">Flag a shift or a clock window. Headcount in matching slots is shown as actual → target after the % drop, by role and sex. Hard-refresh after first load.</p>' +
+      '<p class="muted">Fine-tune until volume exists. On Generate, matching lines are removed by %. Shift start/end, paid hours, and RDOs on the lines that stay are not changed.</p>' +
       '<div class="toolbar" style="flex-wrap:wrap;gap:0.5rem;align-items:end" id="coverage-cut-form">' +
       '<label>Kind <select id="cut-kind"><option value="window">Time window</option><option value="shift">Whole shift</option></select></label>' +
       '<label id="cut-shift-wrap" style="display:none">Shift <select id="cut-shift"></select></label>' +
@@ -81,25 +121,18 @@ window.Scheduler = window.Scheduler || {};
     if (first && first.parentNode) first.parentNode.insertBefore(card, first.nextSibling);
     else tab.appendChild(card);
 
-    var daysHtml = dayNames().map(function (n, i) {
+    $("cut-days").innerHTML = dayNames().map(function (n, i) {
       return '<label class="follow-me-label"><input type="checkbox" data-cut-day="' + i + '" checked /> ' + n + "</label>";
     }).join("");
-    $("cut-days").innerHTML = daysHtml;
-
     $("cut-kind").addEventListener("change", function () {
-      var sh = this.value === "shift";
-      $("cut-shift-wrap").style.display = sh ? "" : "none";
+      $("cut-shift-wrap").style.display = this.value === "shift" ? "" : "none";
     });
     $("btn-cut-add").addEventListener("click", addCutFromForm);
     document.addEventListener("click", function (e) {
       var t = e.target;
-      if (!t) return;
-      if (t.getAttribute && t.getAttribute("data-cut-del")) {
-        removeCut(t.getAttribute("data-cut-del"));
-      }
-      if (t.getAttribute && t.getAttribute("data-cut-toggle")) {
-        toggleCut(t.getAttribute("data-cut-toggle"));
-      }
+      if (!t || !t.getAttribute) return;
+      if (t.getAttribute("data-cut-del")) removeCut(t.getAttribute("data-cut-del"));
+      if (t.getAttribute("data-cut-toggle")) toggleCut(t.getAttribute("data-cut-toggle"));
     });
   }
 
@@ -118,7 +151,7 @@ window.Scheduler = window.Scheduler || {};
     document.querySelectorAll("[data-cut-day]").forEach(function (el) {
       if (el.checked) days.push(+el.getAttribute("data-cut-day"));
     });
-    var cut = {
+    ensureState().push({
       id: uid(),
       enabled: true,
       kind: kind,
@@ -131,38 +164,27 @@ window.Scheduler = window.Scheduler || {};
         LTSO: !!$("cut-role-ltso").checked,
         TSO: !!$("cut-role-tso").checked
       },
-      sexes: {
-        M: !!$("cut-sex-m").checked,
-        F: !!$("cut-sex-f").checked
-      },
+      sexes: { M: !!$("cut-sex-m").checked, F: !!$("cut-sex-f").checked },
       days: days
-    };
-    ensureState().push(cut);
+    });
     renderCutList();
-    if (S.renderCoverageBars) S.renderCoverageBars();
-    if (S.updateStatus) S.updateStatus("Coverage cut added: " + cut.pct + "% " + cut.kind);
+    if (S.updateStatus) S.updateStatus("Cut saved. Generate again to apply it to line counts.");
   }
 
   function removeCut(id) {
     S.state.coverageCuts = ensureState().filter(function (c) { return c.id !== id; });
     renderCutList();
-    if (S.renderCoverageBars) S.renderCoverageBars();
   }
-
   function toggleCut(id) {
-    ensureState().forEach(function (c) {
-      if (c.id === id) c.enabled = !c.enabled;
-    });
+    ensureState().forEach(function (c) { if (c.id === id) c.enabled = !c.enabled; });
     renderCutList();
-    if (S.renderCoverageBars) S.renderCoverageBars();
   }
-
   function renderCutList() {
     var box = $("coverage-cuts-list");
     if (!box) return;
     var cuts = ensureState();
     if (!cuts.length) {
-      box.innerHTML = "No cuts yet. Add one above; cells show actual → target.";
+      box.innerHTML = "No cuts. Add one, then Generate.";
       return;
     }
     box.innerHTML = cuts.map(function (c) {
@@ -179,115 +201,33 @@ window.Scheduler = window.Scheduler || {};
     }).join("");
   }
 
-  if (typeof S.computeHourlyByDow === "function" && !S.computeHourlyByDow._cutsWrapped) {
-    var orig = S.computeHourlyByDow;
-    S.computeHourlyByDow = function () {
-      var computed = orig.apply(this, arguments);
-      var cuts = ensureState().filter(function (c) { return c.enabled; });
-      if (!cuts.length || !computed || !computed.matrix) return computed;
-      var slots = computed.slots || [];
-      var cv = S.coverageView || { stso: false, ltso: false, tso: true };
-      slots.forEach(function (slot, si) {
-        for (var dow = 0; dow < 7; dow++) {
-          var cell = computed.matrix[si][dow];
-          if (!cell) continue;
-          var tm = 0, tf = 0;
-          (S.state.lines || []).forEach(function (line) {
-            var role = S.lineRoleKey ? S.lineRoleKey(line) : "TSO";
-            if (role === "STSO" && !cv.stso) return;
-            if (role === "LTSO" && !cv.ltso) return;
-            if (role === "TSO" && !cv.tso) return;
-            var off = computed.dowToOffset ? computed.dowToOffset[dow] : dow;
-            if (off == null) return;
-            if ((S.state.schedule[line.id] || [])[off] !== "WORK") return;
-            if (!S.getShift(line.shiftId)) return;
-            var times = S.getEffectiveShiftTimes
-              ? S.getEffectiveShiftTimes(line.shiftId, dow)
-              : { start: S.getShift(line.shiftId).start, end: S.getShift(line.shiftId).end };
-            var a = parseMin(times.start), b = parseMin(times.end);
-            if (!(a < slot + 30 && b > slot)) return;
-            var factor = S.coverageCutFactor(line, slot, dow);
-            if (line.sex === "M") tm += factor;
-            else tf += factor;
-          });
-          cell.tm = Math.round(tm * 10) / 10;
-          cell.tf = Math.round(tf * 10) / 10;
-          cell.tt = Math.round((tm + tf) * 10) / 10;
-          cell.cut = (cell.tm + cell.tf) + 0.05 < cell.t;
-        }
-      });
-      return computed;
-    };
-    S.computeHourlyByDow._cutsWrapped = true;
-  }
-
-  if (typeof S.renderCoverageBars === "function" && !S.renderCoverageBars._cutsHint) {
-    var origRender = S.renderCoverageBars;
-    S.renderCoverageBars = function () {
-      origRender.apply(this, arguments);
-      var body = $("coverage-matrix-body");
-      if (!body) return;
-      var computed = S.computeHourlyByDow();
-      if (!computed || !computed.matrix) return;
-      var rows = body.querySelectorAll("tr");
-      computed.slots.forEach(function (slot, si) {
-        var tr = rows[si];
-        if (!tr) return;
-        var tds = tr.querySelectorAll("td");
-        for (var dow = 0; dow < 7; dow++) {
-          var td = tds[dow + 1];
-          var cell = computed.matrix[si][dow];
-          if (!td || !cell || !cell.cut) continue;
-          td.style.outline = "1px solid #c47b2b";
-          td.title = "Target after cuts M/F/T " + cell.tm + "/" + cell.tf + "/" + cell.tt +
-            " (was " + cell.m + "/" + cell.f + "/" + cell.t + ")";
-          td.innerHTML =
-            '<span class="sex-m">' + cell.m + "→" + cell.tm + "</span>/" +
-            '<span class="sex-f">' + cell.f + "→" + cell.tf + "</span>/" +
-            cell.t + "→" + cell.tt;
-        }
-      });
-    };
-    S.renderCoverageBars._cutsHint = true;
-  }
-
-  if (typeof S.exportJson === "function" && !S.exportJson._cutsWrapped) {
-    var origExp = S.exportJson;
-    S.exportJson = function () {
-      if (S.state) S.state.coverageCuts = ensureState();
-      return origExp.apply(this, arguments);
-    };
-    S.exportJson._cutsWrapped = true;
-  }
-  if (typeof S.applyPayload === "function" && !S.applyPayload._cutsWrapped) {
-    var origApply = S.applyPayload;
-    S.applyPayload = function (payload) {
-      var r = origApply.apply(this, arguments);
-      var cuts = (payload && payload.config && payload.config.coverageCuts) ||
-        (payload && payload.coverageCuts) ||
-        (S.state && S.state.coverageCuts) || [];
-      S.state.coverageCuts = Array.isArray(cuts) ? cuts : [];
-      renderCutList();
+  function wrapGenerate() {
+    if (typeof S.generate !== "function" || S.generate._cutsApplyWrapped) return;
+    var orig = S.generate;
+    S.generate = function () {
+      var r = orig.apply(this, arguments);
+      var n = S.applyCoverageCutsToLines();
+      if (n && S.renderAll) S.renderAll();
+      if (n && S.updateStatus) {
+        S.updateStatus("Coverage cuts removed " + n + " line(s). Hours and RDOs unchanged on what remains.");
+      }
       return r;
     };
-    S.applyPayload._cutsWrapped = true;
-  }
-
-  var origExportBuild;
-  function hookPayload() {
-    if (typeof S.exportJson !== "function") return;
+    S.generate._cutsApplyWrapped = true;
   }
 
   function init() {
     injectPanel();
     fillShiftSelect();
     renderCutList();
+    wrapGenerate();
+    setTimeout(wrapGenerate, 0);
     if (typeof S.renderShifts === "function" && !S.renderShifts._cutSel) {
       var rs = S.renderShifts;
       S.renderShifts = function () {
-        var r = rs.apply(this, arguments);
+        var out = rs.apply(this, arguments);
         fillShiftSelect();
-        return r;
+        return out;
       };
       S.renderShifts._cutSel = true;
     }
