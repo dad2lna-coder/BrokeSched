@@ -6,16 +6,33 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Scheduler Alpha Build v2</title>
+  <title>BLADE Alpha Build</title>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <link rel="stylesheet" href="css/styles.css?v=20260902i" />
   <link rel="stylesheet" href="css/line-print.css?v=20260902i" />
   <link rel="stylesheet" href="css/team-build.css?v=20260902i" />
+  <link rel="stylesheet" href="css/intro.css?v=20260904a" />
 </head>
 <body>
+  <div id="blade-intro">
+    <div class="bezel">
+      <div class="crt">
+        <div class="scan"></div>
+        <h1 class="banner">**** AIRPORT OPS BASIC V2 ****</h1>
+        <div class="sub">64K RAM SYSTEM&nbsp;&nbsp;38911 BYTES FREE</div>
+        <div id="blade-term"></div>
+        <pre id="blade-art"></pre>
+        <div id="blade-greet"></div>
+      </div>
+      <div class="chrome">
+        <span><span class="led"></span>BLADE CONSOLE</span>
+        <span>PRESS Y / N WHEN PROMPTED</span>
+      </div>
+    </div>
+  </div>
   <header class="topbar">
-    <div class="brand">Scheduler <span>Alpha Build v2</span></div>
+    <div class="brand">BLADE <span>Alpha Build</span></div>
     <div class="topbar-actions">
       <button class="btn" id="btn-instructions">Instructions</button>
       <button class="btn" id="btn-airport-config">Airport Config</button>
@@ -42,7 +59,7 @@
       <div class="card">
         <div class="section-title">What this is</div>
         <p class="muted" style="margin:0">
-          <strong>v2</strong> staffing balancer. <strong>FT / PT</strong> are operational TSO.
+          <strong>BLADE</strong> staffing balancer. <strong>FT / PT</strong> are operational TSO.
           <strong>LTSO/STSO M/F</strong> are management.
         </p>
       </div>
@@ -344,7 +361,7 @@
       <div id="team-detail-content"></div>
     </div>
   </div>
- 
+
 <div id="instructions-modal" class="modal">
   <div class="modal-content">
     <span class="modal-close" id="instructions-modal-close">&times;</span>
@@ -374,6 +391,7 @@
   <script src="js/teams.js?v=20260902i"></script>
   <script src="js/team-build.js?v=20260902i"></script>
   <script src="js/instructions.js?v=20260903a"></script>
-  <script src="js/main.js?v=20260903a"></script>
+  <script src="js/main.js?v=20260904a"></script>
+  <script src="js/intro.js?v=20260904a"></script>
 </body>
 </html>
