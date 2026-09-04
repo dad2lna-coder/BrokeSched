@@ -1,4 +1,4 @@
-/** Team oddity flags: fill <70%, missing LTSO, sex split — stats list + forming cards. */
+/** Team oddity flags + top-of-page summary. */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -19,114 +19,90 @@ window.Scheduler = window.Scheduler || {};
     if (arch.size && fill < 0.7) {
       flags.push({ code: "FILL", label: Math.round(fill * 100) + "% filled", tone: "warn" });
     }
-    var ltsoHave = c.LTSO.M + c.LTSO.F;
-    if (arch.ltso > 0 && ltsoHave < 1) {
+    if (arch.ltso > 0 && (c.LTSO.M + c.LTSO.F) < 1) {
       flags.push({ code: "NOLTSO", label: "no LTSO", tone: "bad" });
     }
     var m = c.STSO.M + c.LTSO.M + c.TSO.M;
     var f = c.STSO.F + c.LTSO.F + c.TSO.F;
     var tot = m + f;
-    if (tot >= 3) {
-      var share = Math.abs(m - f) / tot;
-      if (share >= 0.4) {
-        flags.push({
-          code: "SEX",
-          label: m + "M/" + f + "F",
-          tone: share >= 0.6 ? "bad" : "warn"
-        });
-      }
+    if (tot >= 3 && Math.abs(m - f) / tot >= 0.4) {
+      flags.push({ code: "SEX", label: m + "M/" + f + "F", tone: Math.abs(m - f) / tot >= 0.6 ? "bad" : "warn" });
     }
     return flags;
   };
 
-  function flagHtml(flags) {
-    if (!flags.length) return "";
-    return '<div class="team-oddity-row">' + flags.map(function (f) {
-      var color = f.tone === "bad" ? "#c45c4a" : "#c47b2b";
-      return '<span class="team-oddity-pill" style="display:inline-block;margin:0.15rem 0.25rem 0 0;padding:0.08rem 0.4rem;border:1px solid ' +
-        color + ";color:" + color + ';font-size:0.72rem;letter-spacing:0.04em">' +
-        f.label + "</span>";
-    }).join("") + "</div>";
-  }
-
-  function wrapStats() {
-    if (typeof S.renderTeamStats !== "function" || S.renderTeamStats._oddWrapped) return;
-    var orig = S.renderTeamStats;
-    S.renderTeamStats = function () {
-      orig.apply(this, arguments);
-      var body = document.getElementById("team-stats-body");
-      if (!body) return;
-      var teams = (S.teams && S.teams.teams) || [];
-      var lines = body.querySelectorAll(".team-stat-team-line");
-      var alertBits = [];
-      teams.forEach(function (t, i) {
-        var flags = S.teamOddities(t);
-        if (!flags.length) return;
-        if (lines[i]) lines[i].insertAdjacentHTML("beforeend", flagHtml(flags));
-        alertBits.push((t.name || t.id) + ": " + flags.map(function (f) { return f.label; }).join(", "));
+  function collect() {
+    var fill = [], noltso = [], sex = [];
+    ((S.teams && S.teams.teams) || []).forEach(function (t) {
+      var name = t.name || t.id;
+      S.teamOddities(t).forEach(function (f) {
+        if (f.code === "FILL") fill.push(name);
+        if (f.code === "NOLTSO") noltso.push(name);
+        if (f.code === "SEX") sex.push(name);
       });
-      var host = body.querySelector(".team-stat-summary") || body;
-      var old = document.getElementById("team-oddity-banner");
-      if (old) old.parentNode.removeChild(old);
-      var banner = document.createElement("div");
-      banner.id = "team-oddity-banner";
-      banner.style.marginTop = "0.45rem";
-      if (alertBits.length) {
-        banner.innerHTML = '<span style="color:#c47b2b">Oddities (' + alertBits.length +
-          "):</span> " + alertBits.join(" · ");
-      } else if (teams.length) {
-        banner.innerHTML = '<span class="muted">No fill / LTSO / sex oddities vs architecture.</span>';
-      }
-      host.appendChild(banner);
-    };
-    S.renderTeamStats._oddWrapped = true;
-  }
-
-  function wrapCards() {
-    if (typeof S.teamSummaryCardHtml !== "function" || S.teamSummaryCardHtml._oddWrapped) return;
-    var orig = S.teamSummaryCardHtml;
-    S.teamSummaryCardHtml = function (t) {
-      var html = orig.apply(this, arguments);
-      var flags = S.teamOddities(t);
-      if (!flags.length) return html;
-      return html.replace("</div></div>", flagHtml(flags) + "</div></div>");
-    };
-    S.teamSummaryCardHtml._oddWrapped = true;
-  }
-
-  function stampExistingCards() {
-    document.querySelectorAll(".team-summary-card[data-summary-team]").forEach(function (el) {
-      if (el.querySelector(".team-oddity-row")) return;
-      var id = el.getAttribute("data-summary-team");
-      var team = S.getTeamById ? S.getTeamById(id) : null;
-      var flags = S.teamOddities(team);
-      if (!flags.length) return;
-      el.insertAdjacentHTML("beforeend", flagHtml(flags));
     });
-    document.querySelectorAll("#team-boards .team-board, #team-boards [data-team-id]").forEach(function () {});
+    return { fill: fill, noltso: noltso, sex: sex };
   }
 
-  function wrapBoards() {
-    if (typeof S.renderTeamBoards !== "function" || S.renderTeamBoards._oddWrapped) return;
-    var orig = S.renderTeamBoards;
-    S.renderTeamBoards = function () {
+  function ensureBanner() {
+    var existing = document.getElementById("team-oddity-top");
+    if (existing) return existing;
+    var bar = document.createElement("div");
+    bar.id = "team-oddity-top";
+    bar.setAttribute("role", "status");
+    bar.style.cssText = "font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;letter-spacing:0.06em;padding:0.4rem 1rem;border-bottom:1px solid #c47b2b55;background:#1a140c;color:#e8dcc8;";
+    var header = document.querySelector(".console-header") || document.querySelector("header") || document.body.firstElementChild;
+    if (header && header.parentNode) header.parentNode.insertBefore(bar, header.nextSibling);
+    else document.body.insertBefore(bar, document.body.firstChild);
+    return bar;
+  }
+
+  S.refreshTeamOddityBanner = function () {
+    var bar = ensureBanner();
+    var teams = (S.teams && S.teams.teams) || [];
+    if (!teams.length) {
+      bar.style.display = "none";
+      return;
+    }
+    bar.style.display = "block";
+    var o = collect();
+    var n = o.fill.length + o.noltso.length + o.sex.length;
+    if (!n) {
+      bar.style.borderBottomColor = "#3d6b4555";
+      bar.style.color = "#b7c9b0";
+      bar.textContent = "TEAMS CHECK  OK  ·  " + teams.length + " team(s)  ·  none under 70%  ·  all have LTSO  ·  sex split ok";
+      return;
+    }
+    bar.style.borderBottomColor = "#c47b2b";
+    bar.style.color = "#e8dcc8";
+    var parts = [];
+    if (o.fill.length) parts.push(o.fill.length + " under 70% (" + o.fill.join(", ") + ")");
+    if (o.noltso.length) parts.push(o.noltso.length + " no LTSO (" + o.noltso.join(", ") + ")");
+    if (o.sex.length) parts.push(o.sex.length + " sex split (" + o.sex.join(", ") + ")");
+    bar.textContent = "TEAMS CHECK  " + parts.join("   ·   ");
+  };
+
+  function hook(name) {
+    if (typeof S[name] !== "function" || S[name]._oddTop) return;
+    var orig = S[name];
+    S[name] = function () {
       var r = orig.apply(this, arguments);
-      stampExistingCards();
+      S.refreshTeamOddityBanner();
       return r;
     };
-    S.renderTeamBoards._oddWrapped = true;
+    S[name]._oddTop = true;
   }
 
   function init() {
-    wrapStats();
-    wrapCards();
-    wrapBoards();
+    hook("renderTeams");
+    hook("renderTeamStats");
+    hook("renderAll");
+    hook("autoFormTeams");
     setTimeout(function () {
-      wrapStats();
-      wrapCards();
-      wrapBoards();
-      if (S.renderTeamStats) S.renderTeamStats();
-      if (S.renderTeamBoards) S.renderTeamBoards();
+      hook("renderTeams");
+      hook("renderTeamStats");
+      hook("renderAll");
+      S.refreshTeamOddityBanner();
     }, 0);
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
