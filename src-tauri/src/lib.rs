@@ -182,6 +182,32 @@ fn write_shared_bytes(filename: String, bytes: Vec<u8>, airport: Option<String>)
 }
 
 #[tauri::command]
+fn read_shared_file(filename: String, airport: Option<String>) -> Result<String, String> {
+    let dest_dir = match airport {
+        Some(code) if sanitize_airport(&code).len() == 3 => airport_dir(&code)?,
+        _ => find_schedule_builder(),
+    };
+    let dest = dest_dir.join(filename);
+    fs::read_to_string(&dest).map_err(|e| format!("Cannot read {}: {}", dest.display(), e))
+}
+
+#[tauri::command]
+fn list_airport_files(airport: String) -> Result<Vec<String>, String> {
+    let dir = airport_dir(&airport)?;
+    ensure_dir(&dir)?;
+    let mut names = Vec::new();
+    if let Ok(rd) = fs::read_dir(&dir) {
+        for entry in rd.flatten() {
+            if entry.path().is_file() {
+                names.push(entry.file_name().to_string_lossy().to_string());
+            }
+        }
+    }
+    names.sort();
+    Ok(names)
+}
+
+#[tauri::command]
 fn apply_share_update() -> Result<String, String> {
     let _ = shared_folder_path()?;
     let dir = update_dir();
@@ -217,6 +243,8 @@ pub fn run() {
             shared_folder_path,
             ensure_airport_folder,
             write_shared_bytes,
+            read_shared_file,
+            list_airport_files,
             apply_share_update
         ])
         .run(tauri::generate_context!())
