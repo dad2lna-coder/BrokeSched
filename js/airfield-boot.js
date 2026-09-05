@@ -35,17 +35,72 @@ window.Scheduler = window.Scheduler || {};
     };
   }
 
+  function snapshotFunctionCoverage() {
+    if (S.readFunctionCoverageForm) {
+      try { S.readFunctionCoverageForm(); } catch (e) {}
+    }
+    var fc = S.ensureFunctionCoverage ? S.ensureFunctionCoverage() : (S.state && S.state.functionCoverage);
+    if (!fc) return null;
+    return {
+      poolStsoDfo: fc.poolStsoDfo || 0,
+      poolLtsoDfo: fc.poolLtsoDfo || 0,
+      poolTsoDfo: fc.poolTsoDfo || 0,
+      poolBag: fc.poolBag || 0,
+      amPmSplit: fc.amPmSplit !== false,
+      phaseThresholdMin: fc.phaseThresholdMin != null ? fc.phaseThresholdMin : 15,
+      enableDfo: fc.enableDfo !== false,
+      enableBag: fc.enableBag !== false,
+      enablePax: !!fc.enablePax,
+      bands: (fc.bands || []).map(function (b) {
+        return {
+          start: b.start,
+          end: b.end,
+          stso: +b.stso || 0,
+          ltso: +b.ltso || 0,
+          tso: +b.tso || 0,
+          dfo: +b.dfo || 0,
+          bag: +b.bag || 0,
+          pax: +b.pax || 0
+        };
+      })
+    };
+  }
+
+  function applyFunctionCoverage(fc) {
+    if (!fc || typeof fc !== "object") return;
+    if (!S.state) S.state = {};
+    if (!S.state.functionCoverage) S.state.functionCoverage = {};
+    var dest = S.state.functionCoverage;
+    if (fc.poolStsoDfo != null) dest.poolStsoDfo = +fc.poolStsoDfo || 0;
+    if (fc.poolLtsoDfo != null) dest.poolLtsoDfo = +fc.poolLtsoDfo || 0;
+    if (fc.poolTsoDfo != null) dest.poolTsoDfo = +fc.poolTsoDfo || 0;
+    if (fc.poolBag != null) dest.poolBag = +fc.poolBag || 0;
+    if (fc.amPmSplit != null) dest.amPmSplit = !!fc.amPmSplit;
+    if (fc.phaseThresholdMin != null) dest.phaseThresholdMin = +fc.phaseThresholdMin || 0;
+    if (fc.enableDfo != null) dest.enableDfo = !!fc.enableDfo;
+    if (fc.enableBag != null) dest.enableBag = !!fc.enableBag;
+    if (fc.enablePax != null) dest.enablePax = !!fc.enablePax;
+    if (Array.isArray(fc.bands)) dest.bands = fc.bands.slice();
+    if (S.ensureFunctionCoverage) S.ensureFunctionCoverage();
+    if (S.fillFunctionCoverageForm) S.fillFunctionCoverageForm();
+    if (S.renderFunctionBandsTable) S.renderFunctionBandsTable();
+    if (S.updateFunctionCoveragePreview) S.updateFunctionCoveragePreview();
+  }
+
   function dest() {
     return S.getAirportConfig ? S.getAirportConfig() : null;
   }
 
-  function applyCfg(cfg) {
+  function applyCfg(raw) {
+    var cfg = raw && (raw.config || raw.airportConfig || raw);
+    if (!cfg || typeof cfg !== "object") return false;
     var d = dest();
-    if (!d || !cfg) return false;
+    if (!d) return false;
     if (cfg.startTime) d.startTime = cfg.startTime;
     if (cfg.endTime) d.endTime = cfg.endTime;
     if (cfg.volumePerHour) d.volumePerHour = cfg.volumePerHour;
     if (Array.isArray(cfg.terminals)) d.terminals = cfg.terminals;
+    applyFunctionCoverage(raw.functionCoverage || cfg.functionCoverage);
     seeded = true;
     return true;
   }
@@ -63,6 +118,29 @@ window.Scheduler = window.Scheduler || {};
     applyCfg(defaultConfig());
   }
 
+  function payload() {
+    return {
+      app: "blade-airfield",
+      version: 2,
+      airport: S.getAirportCode ? S.getAirportCode() : "",
+      savedAt: new Date().toISOString(),
+      config: dest() || defaultConfig(),
+      functionCoverage: snapshotFunctionCoverage()
+    };
+  }
+
+  function downloadJson(filename, obj) {
+    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    var url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function introIsUp() {
     var intro = document.getElementById("blade-intro");
     if (!intro) return false;
@@ -77,28 +155,6 @@ window.Scheduler = window.Scheduler || {};
     var btn = document.querySelector('.tab-btn[data-tab="setup"]');
     if (btn && btn.classList.contains("active")) return true;
     return !!(panel && panel.classList.contains("active"));
-  }
-
-  function payload() {
-    return {
-      app: "blade-airfield",
-      version: 1,
-      airport: S.getAirportCode ? S.getAirportCode() : "",
-      savedAt: new Date().toISOString(),
-      config: dest() || defaultConfig()
-    };
-  }
-
-  function downloadJson(filename, obj) {
-    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
-    var a = document.createElement("a");
-    var url = URL.createObjectURL(blob);
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   }
 
   S.openAirfieldConfirm = function () {
@@ -146,8 +202,7 @@ window.Scheduler = window.Scheduler || {};
     reader.onload = function () {
       try {
         var raw = JSON.parse(String(reader.result || "{}"));
-        var cfg = raw.config || raw.airportConfig || raw;
-        if (!applyCfg(cfg)) throw new Error("not an airfield config");
+        if (!applyCfg(raw)) throw new Error("not an airfield config");
         if (S.updateStatus) S.updateStatus("Imported " + file.name);
         S.openAirfieldConfirm();
       } catch (err) {
