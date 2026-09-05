@@ -1,9 +1,10 @@
-/** Airfield boot: default layout, modal open, import/confirm */
+/** Airfield boot: default layout, import/confirm, modal on Setup tab only */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
   var seeded = false;
+  var confirmed = false;
 
   function defaultConfig() {
     return {
@@ -53,7 +54,6 @@ window.Scheduler = window.Scheduler || {};
     if (seeded) return;
     var d = dest();
     if (d && d.terminals && d.terminals.length) {
-      /* replace the old 2-checkpoint seed with the requested default */
       var cps = (d.terminals[0] && d.terminals[0].checkpoints) || [];
       var sets = cps[0] && cps[0].modSets ? cps[0].modSets.length : 0;
       if (d.terminals.length !== 1 || cps.length !== 1 || sets !== 6) applyCfg(defaultConfig());
@@ -61,6 +61,22 @@ window.Scheduler = window.Scheduler || {};
       return;
     }
     applyCfg(defaultConfig());
+  }
+
+  function introIsUp() {
+    var intro = document.getElementById("blade-intro");
+    if (!intro) return false;
+    if (intro.hidden || intro.getAttribute("hidden") !== null) return false;
+    var st = window.getComputedStyle ? window.getComputedStyle(intro) : null;
+    if (st && (st.display === "none" || st.visibility === "hidden")) return false;
+    return true;
+  }
+
+  function setupIsActive() {
+    var panel = document.getElementById("tab-setup");
+    var btn = document.querySelector('.tab-btn[data-tab="setup"]');
+    if (btn && btn.classList.contains("active")) return true;
+    return !!(panel && panel.classList.contains("active"));
   }
 
   function payload() {
@@ -86,10 +102,12 @@ window.Scheduler = window.Scheduler || {};
   }
 
   S.openAirfieldConfirm = function () {
+    if (introIsUp()) return false;
+    if (!setupIsActive()) return false;
     var modal = document.getElementById("airport-config-modal");
     if (!modal) return false;
     modal.style.display = "block";
-    modal.style.zIndex = "10050";
+    modal.style.zIndex = "400";
     ensureButtons();
     return true;
   };
@@ -115,6 +133,7 @@ window.Scheduler = window.Scheduler || {};
   };
 
   S.confirmAirfieldConfig = function () {
+    confirmed = true;
     return S.exportAirfieldConfig().then(function () {
       var modal = document.getElementById("airport-config-modal");
       if (modal) modal.style.display = "none";
@@ -130,9 +149,6 @@ window.Scheduler = window.Scheduler || {};
         var cfg = raw.config || raw.airportConfig || raw;
         if (!applyCfg(cfg)) throw new Error("not an airfield config");
         if (S.updateStatus) S.updateStatus("Imported " + file.name);
-        S.openAirfieldConfirm();
-        var openBtn = document.getElementById("btn-airport-config");
-        if (openBtn) openBtn.click();
         S.openAirfieldConfirm();
       } catch (err) {
         if (S.updateStatus) S.updateStatus("Import failed: " + (err && err.message ? err.message : err));
@@ -167,17 +183,44 @@ window.Scheduler = window.Scheduler || {};
     });
   }
 
-  function boot() {
+  function onSetupActive() {
     applyDefaultOnce();
     ensureButtons();
-    S.openAirfieldConfirm();
+    if (!confirmed) S.openAirfieldConfirm();
   }
 
-  window.addEventListener("blade-intro-done", boot);
+  function hookTabs() {
+    if (typeof S.switchTab === "function" && !S.switchTab._airfieldHooked) {
+      var orig = S.switchTab;
+      S.switchTab = function (name) {
+        var result = orig.apply(this, arguments);
+        if (name === "setup") onSetupActive();
+        return result;
+      };
+      S.switchTab._airfieldHooked = true;
+    }
+    document.querySelectorAll('.tab-btn[data-tab="setup"]').forEach(function (btn) {
+      if (btn._airfieldHooked) return;
+      btn._airfieldHooked = true;
+      btn.addEventListener("click", function () {
+        setTimeout(onSetupActive, 0);
+      });
+    });
+  }
+
+  function hideIfIntro() {
+    if (!introIsUp()) return;
+    var modal = document.getElementById("airport-config-modal");
+    if (modal) modal.style.display = "none";
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
-    boot();
-    setTimeout(boot, 700);
-    setTimeout(boot, 2000);
+    applyDefaultOnce();
+    hookTabs();
+    hideIfIntro();
   });
-  setTimeout(boot, 400);
+  window.addEventListener("blade-intro-done", function () {
+    hookTabs();
+    if (setupIsActive()) onSetupActive();
+  });
 })(window.Scheduler);
