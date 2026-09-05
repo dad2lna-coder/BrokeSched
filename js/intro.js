@@ -1,4 +1,4 @@
-/** C64 boot intro. Desktop (Tauri): airport then Y/N. Web/mobile: skip airport and continue. */
+/** C64 boot intro. All platforms: lock a 3-letter airport, then continue. */
 (function () {
   "use strict";
 
@@ -78,6 +78,10 @@
     if (intro) { intro.hidden = true; intro.setAttribute("hidden", ""); }
     window.removeEventListener("keydown", onConfirmKey);
     window.removeEventListener("keydown", onAirportKey);
+    window.dispatchEvent(new CustomEvent("blade-intro-done"));
+    if (window.Scheduler && Scheduler.openAirfieldConfirm) {
+      setTimeout(function () { Scheduler.openAirfieldConfirm(); }, 200);
+    }
   }
   function shutdownIntro() {
     var greet = $("blade-greet");
@@ -95,7 +99,22 @@
 
   function renderAirportLine() {
     var greet = $("blade-greet");
-    if (greet) greet.innerHTML = greetBase + airportBuf + cursorHtml();
+    if (!greet) return;
+    greet.innerHTML = greetBase + airportBuf + cursorHtml() +
+      '<div class="intro-air-ui" style="margin-top:12px">' +
+      '<input id="intro-airport-input" maxlength="3" autocapitalize="characters" placeholder="DFW" ' +
+      'style="font-size:1.2rem;width:5rem;text-transform:uppercase;padding:6px" /> ' +
+      '<button type="button" id="intro-lock-btn" class="btn btn-amber">LOCK</button></div>';
+    var inp = $("intro-airport-input");
+    var btn = $("intro-lock-btn");
+    if (inp) {
+      inp.value = airportBuf;
+      inp.addEventListener("input", function () {
+        airportBuf = String(inp.value || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
+        inp.value = airportBuf;
+      });
+    }
+    if (btn) btn.addEventListener("click", function () { finishAirport(); });
   }
   function onAirportKey(e) {
     if (airportDone) return;
@@ -111,6 +130,8 @@
   }
   function finishAirport() {
     if (airportDone) return;
+    var typed = $("intro-airport-input");
+    if (typed && typed.value) airportBuf = String(typed.value).toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3);
     var code = applyAirport(airportBuf);
     if (!code) return;
     airportDone = true;
@@ -121,7 +142,14 @@
         greetBase + code +
         "\nAIRPORT LOCKED: " + code +
         "\nOPERATOR: " + operatorName +
-        "\n\nCONTINUE? (Y/N)" + cursorHtml();
+        "\n\nCONTINUE? (Y/N)" +
+        '<div class="intro-air-ui" style="margin-top:12px">' +
+        '<button type="button" id="intro-yes" class="btn btn-amber">Y — CONTINUE</button> ' +
+        '<button type="button" id="intro-no" class="btn">N</button></div>';
+      var y = $("intro-yes");
+      var n = $("intro-no");
+      if (y) y.addEventListener("click", function () { dismissIntro(); });
+      if (n) n.addEventListener("click", function () { shutdownIntro(); });
     }
     window.addEventListener("keydown", onConfirmKey);
   }
@@ -140,28 +168,27 @@
     intro.hidden = false;
     intro.removeAttribute("hidden");
     try { operatorName = await invoke("get_operator"); }
-    catch (e) { operatorName = isTauri() ? "OPERATOR" : "WEB"; }
+    catch (e) { operatorName = isTauri() ? "OPERATOR" : (isMobile() ? "MOBILE" : "WEB"); }
     if (window.Scheduler && Scheduler.setOperator) Scheduler.setOperator(operatorName);
     else { try { localStorage.setItem("blade.operator", operatorName); } catch (e) {} }
 
-    await typeInto(term, "READY.\nLOAD \"BID-LINE-GEN\",8,1\n", 32);
-    await sleep(280);
-    await typeInto(term, "READY.\nLOAD \"BID-LINE-GEN\",8,1\n\nSEARCHING FOR BID-LINE-GEN\nLOADING\n", 22);
-    await drawAscii(art, BLADE, 65);
+    await typeInto(term, "READY.\nLOAD \"BID-LINE-GEN\",8,1\n", 24);
+    await sleep(180);
+    await typeInto(term, "READY.\nLOAD \"BID-LINE-GEN\",8,1\n\nSEARCHING FOR BID-LINE-GEN\nLOADING\n", 16);
+    await drawAscii(art, BLADE, 40);
 
-    if (!isTauri()) {
-      var webMsg = "\nHELLO, OPERATOR.\nBLADE ALPHA BUILD ONLINE.\nWEB CONSOLE \u2014 NO AIRPORT LOCK.\n";
-      await typeInto(greet, webMsg, 28);
-      await sleep(isMobile() ? 900 : 700);
-      dismissIntro();
-      return;
-    }
     greetBase = "\nHELLO, " + operatorName + ".\nBLADE ALPHA BUILD ONLINE.\n\nAIRPORT CODE (3 LETTERS): ";
-    await typeInto(greet, greetBase, 36);
+    await typeInto(greet, greetBase, 22);
     airportBuf = "";
     airportDone = false;
     renderAirportLine();
     window.addEventListener("keydown", onAirportKey);
+    var saved = "";
+    try { saved = (localStorage.getItem("blade.airportCode") || "").toUpperCase(); } catch (e) {}
+    if (saved.length === 3) {
+      airportBuf = saved;
+      renderAirportLine();
+    }
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", runIntro);
@@ -173,6 +200,7 @@
     s.src = src;
     document.body.appendChild(s);
   }
+  boot("js/airfield-boot.js?v=20260905e");
   boot("js/coverage-cuts.js?v=20260904h");
   boot("js/team-flags.js?v=20260904j");
   boot("js/team-close.js?v=20260904k");
