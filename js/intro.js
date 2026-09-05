@@ -75,6 +75,7 @@
 
   function afterIntro() {
     window.dispatchEvent(new CustomEvent("blade-intro-done"));
+    if (window.Scheduler && Scheduler.rebuildSetupTab) Scheduler.rebuildSetupTab();
     if (window.Scheduler && Scheduler.openAirfieldConfirm) {
       setTimeout(function () { Scheduler.openAirfieldConfirm(); }, 250);
     }
@@ -181,7 +182,8 @@
     s.src = src;
     document.body.appendChild(s);
   }
-  boot("js/airfield-boot.js?v=20260905e");
+  boot("js/setup-ui.js?v=20260905g");
+  boot("js/airfield-boot.js?v=20260905g");
   boot("js/coverage-cuts.js?v=20260904h");
   boot("js/team-flags.js?v=20260904j");
   boot("js/team-close.js?v=20260904k");
