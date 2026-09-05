@@ -1,10 +1,20 @@
-/** Airfield boot: default layout, import/confirm, modal on Setup tab only */
+/** Airfield boot + staffing export (FTE + function coverage, no lines) */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
   var seeded = false;
   var confirmed = false;
+  var imported = false;
+  var dirty = false;
+
+  function loadSetupUi() {
+    if (document.querySelector('script[src*="js/setup-ui.js"]')) return;
+    var s = document.createElement("script");
+    s.src = "js/setup-ui.js?v=20260905g";
+    document.body.appendChild(s);
+  }
+  loadSetupUi();
 
   function defaultConfig() {
     return {
@@ -12,16 +22,10 @@ window.Scheduler = window.Scheduler || {};
       endTime: "23:00",
       volumePerHour: { STD: 150, PRE: 240, MIX: 195 },
       terminals: [{
-        id: 1,
-        name: "Terminal 1",
-        startTime: "03:30",
-        endTime: "23:00",
+        id: 1, name: "Terminal 1", startTime: "03:30", endTime: "23:00",
         baseTSOCost: { STD: 6, PRE: 5, MIX: 6 },
         checkpoints: [{
-          id: 1,
-          name: "Checkpoint 1",
-          startTime: "03:30",
-          endTime: "23:00",
+          id: 1, name: "Checkpoint 1", startTime: "03:30", endTime: "23:00",
           modSets: [
             { id: 1, name: "MS-1", startTime: "03:30", lanes: 2, program: "STD" },
             { id: 2, name: "MS-2", startTime: "03:30", lanes: 2, program: "STD" },
@@ -35,33 +39,21 @@ window.Scheduler = window.Scheduler || {};
     };
   }
 
+  function dest() { return S.getAirportConfig ? S.getAirportConfig() : null; }
+
   function snapshotFunctionCoverage() {
-    if (S.readFunctionCoverageForm) {
-      try { S.readFunctionCoverageForm(); } catch (e) {}
-    }
+    if (S.readFunctionCoverageForm) { try { S.readFunctionCoverageForm(); } catch (e) {} }
+    if (S.readFunctionBandsFromDom) { try { S.readFunctionBandsFromDom(); } catch (e) {} }
     var fc = S.ensureFunctionCoverage ? S.ensureFunctionCoverage() : (S.state && S.state.functionCoverage);
     if (!fc) return null;
     return {
       poolStsoDfo: fc.poolStsoDfo || 0,
       poolLtsoDfo: fc.poolLtsoDfo || 0,
       poolTsoDfo: fc.poolTsoDfo || 0,
-      poolBag: fc.poolBag || 0,
       amPmSplit: fc.amPmSplit !== false,
       phaseThresholdMin: fc.phaseThresholdMin != null ? fc.phaseThresholdMin : 15,
-      enableDfo: fc.enableDfo !== false,
-      enableBag: fc.enableBag !== false,
-      enablePax: !!fc.enablePax,
       bands: (fc.bands || []).map(function (b) {
-        return {
-          start: b.start,
-          end: b.end,
-          stso: +b.stso || 0,
-          ltso: +b.ltso || 0,
-          tso: +b.tso || 0,
-          dfo: +b.dfo || 0,
-          bag: +b.bag || 0,
-          pax: +b.pax || 0
-        };
+        return { start: b.start, end: b.end, stso: +b.stso || 0, ltso: +b.ltso || 0, tso: +b.tso || 0 };
       })
     };
   }
@@ -70,37 +62,26 @@ window.Scheduler = window.Scheduler || {};
     if (!fc || typeof fc !== "object") return;
     if (!S.state) S.state = {};
     if (!S.state.functionCoverage) S.state.functionCoverage = {};
-    var dest = S.state.functionCoverage;
-    if (fc.poolStsoDfo != null) dest.poolStsoDfo = +fc.poolStsoDfo || 0;
-    if (fc.poolLtsoDfo != null) dest.poolLtsoDfo = +fc.poolLtsoDfo || 0;
-    if (fc.poolTsoDfo != null) dest.poolTsoDfo = +fc.poolTsoDfo || 0;
-    if (fc.poolBag != null) dest.poolBag = +fc.poolBag || 0;
-    if (fc.amPmSplit != null) dest.amPmSplit = !!fc.amPmSplit;
-    if (fc.phaseThresholdMin != null) dest.phaseThresholdMin = +fc.phaseThresholdMin || 0;
-    if (fc.enableDfo != null) dest.enableDfo = !!fc.enableDfo;
-    if (fc.enableBag != null) dest.enableBag = !!fc.enableBag;
-    if (fc.enablePax != null) dest.enablePax = !!fc.enablePax;
-    if (Array.isArray(fc.bands)) dest.bands = fc.bands.slice();
+    var d = S.state.functionCoverage;
+    if (fc.poolStsoDfo != null) d.poolStsoDfo = +fc.poolStsoDfo || 0;
+    if (fc.poolLtsoDfo != null) d.poolLtsoDfo = +fc.poolLtsoDfo || 0;
+    if (fc.poolTsoDfo != null) d.poolTsoDfo = +fc.poolTsoDfo || 0;
+    if (fc.amPmSplit != null) d.amPmSplit = !!fc.amPmSplit;
+    if (fc.phaseThresholdMin != null) d.phaseThresholdMin = +fc.phaseThresholdMin || 0;
+    if (Array.isArray(fc.bands)) d.bands = fc.bands.slice();
     if (S.ensureFunctionCoverage) S.ensureFunctionCoverage();
     if (S.fillFunctionCoverageForm) S.fillFunctionCoverageForm();
     if (S.renderFunctionBandsTable) S.renderFunctionBandsTable();
     if (S.updateFunctionCoveragePreview) S.updateFunctionCoveragePreview();
   }
 
-  function dest() {
-    return S.getAirportConfig ? S.getAirportConfig() : null;
-  }
-
-  function applyCfg(raw) {
-    var cfg = raw && (raw.config || raw.airportConfig || raw);
-    if (!cfg || typeof cfg !== "object") return false;
+  function applyAirfield(cfg) {
     var d = dest();
-    if (!d) return false;
+    if (!d || !cfg) return false;
     if (cfg.startTime) d.startTime = cfg.startTime;
     if (cfg.endTime) d.endTime = cfg.endTime;
     if (cfg.volumePerHour) d.volumePerHour = cfg.volumePerHour;
     if (Array.isArray(cfg.terminals)) d.terminals = cfg.terminals;
-    applyFunctionCoverage(raw.functionCoverage || cfg.functionCoverage);
     seeded = true;
     return true;
   }
@@ -111,89 +92,91 @@ window.Scheduler = window.Scheduler || {};
     if (d && d.terminals && d.terminals.length) {
       var cps = (d.terminals[0] && d.terminals[0].checkpoints) || [];
       var sets = cps[0] && cps[0].modSets ? cps[0].modSets.length : 0;
-      if (d.terminals.length !== 1 || cps.length !== 1 || sets !== 6) applyCfg(defaultConfig());
+      if (d.terminals.length !== 1 || cps.length !== 1 || sets !== 6) applyAirfield(defaultConfig());
       else seeded = true;
       return;
     }
-    applyCfg(defaultConfig());
-  }
-
-  function payload() {
-    return {
-      app: "blade-airfield",
-      version: 2,
-      airport: S.getAirportCode ? S.getAirportCode() : "",
-      savedAt: new Date().toISOString(),
-      config: dest() || defaultConfig(),
-      functionCoverage: snapshotFunctionCoverage()
-    };
+    applyAirfield(defaultConfig());
   }
 
   function downloadJson(filename, obj) {
     var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
     var a = document.createElement("a");
     var url = URL.createObjectURL(blob);
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+
+  function staffingPayload() {
+    if (S.readFunctionBandsFromDom) { try { S.readFunctionBandsFromDom(); } catch (e) {} }
+    return {
+      app: "blade-staffing",
+      version: 1,
+      savedAt: new Date().toISOString(),
+      fte: S.snapshotFte ? S.snapshotFte() : null,
+      functionCoverage: snapshotFunctionCoverage()
+    };
+  }
+
+  S.exportStaffingConfig = function () {
+    var data = staffingPayload();
+    var filename = "staffing.json";
+    try { localStorage.setItem("blade.staffingJson", JSON.stringify(data)); } catch (e) {}
+    downloadJson(filename, data);
+    if (S.updateStatus) S.updateStatus("Downloaded staffing.json (FTE + function coverage).");
+    return Promise.resolve();
+  };
+
+  S.markAirfieldDirty = function () { dirty = true; };
 
   function introIsUp() {
     var intro = document.getElementById("blade-intro");
     if (!intro) return false;
     if (intro.hidden || intro.getAttribute("hidden") !== null) return false;
-    var st = window.getComputedStyle ? window.getComputedStyle(intro) : null;
-    if (st && (st.display === "none" || st.visibility === "hidden")) return false;
     return true;
   }
-
   function setupIsActive() {
-    var panel = document.getElementById("tab-setup");
     var btn = document.querySelector('.tab-btn[data-tab="setup"]');
     if (btn && btn.classList.contains("active")) return true;
+    var panel = document.getElementById("tab-setup");
     return !!(panel && panel.classList.contains("active"));
   }
 
   S.openAirfieldConfirm = function () {
-    if (introIsUp()) return false;
-    if (!setupIsActive()) return false;
+    if (introIsUp() || !setupIsActive()) return false;
     var modal = document.getElementById("airport-config-modal");
     if (!modal) return false;
     modal.style.display = "block";
     modal.style.zIndex = "400";
     ensureButtons();
+    var hint = document.getElementById("airfield-save-hint");
+    if (hint) hint.textContent = (imported && !dirty) ? "Imported — Continue without saving." : "Confirm saves airfield layout only if it changed.";
+    var go = document.getElementById("btn-airfield-confirm");
+    if (go) go.textContent = (imported && !dirty) ? "Continue" : "Confirm airfield";
     return true;
-  };
-
-  S.exportAirfieldConfig = function () {
-    var data = payload();
-    var filename = (data.airport || "WEB") + "_airfield.json";
-    try { localStorage.setItem("blade.airfieldJson", JSON.stringify(data)); } catch (e) {}
-    var core = window.__TAURI__ && window.__TAURI__.core;
-    if (core && typeof core.invoke === "function" && data.airport) {
-      var bytes = Array.from(new TextEncoder().encode(JSON.stringify(data, null, 2)));
-      return core.invoke("write_shared_bytes", {
-        filename: "airfield.json",
-        bytes: bytes,
-        airport: data.airport
-      }).then(function (path) {
-        if (S.updateStatus) S.updateStatus("Saved airfield to " + path);
-      }).catch(function () { downloadJson(filename, data); });
-    }
-    downloadJson(filename, data);
-    if (S.updateStatus) S.updateStatus("Downloaded " + filename);
-    return Promise.resolve();
   };
 
   S.confirmAirfieldConfig = function () {
     confirmed = true;
-    return S.exportAirfieldConfig().then(function () {
-      var modal = document.getElementById("airport-config-modal");
-      if (modal) modal.style.display = "none";
-    });
+    var modal = document.getElementById("airport-config-modal");
+    function close() { if (modal) modal.style.display = "none"; }
+    if (imported && !dirty) {
+      if (S.updateStatus) S.updateStatus("Using imported airfield. Nothing saved.");
+      close();
+      return Promise.resolve();
+    }
+    var data = {
+      app: "blade-airfield",
+      version: 2,
+      savedAt: new Date().toISOString(),
+      config: dest()
+    };
+    downloadJson("airfield.json", data);
+    dirty = false;
+    if (S.updateStatus) S.updateStatus("Saved airfield layout.");
+    close();
+    return Promise.resolve();
   };
 
   S.importAirfieldFile = function (file) {
@@ -202,8 +185,22 @@ window.Scheduler = window.Scheduler || {};
     reader.onload = function () {
       try {
         var raw = JSON.parse(String(reader.result || "{}"));
-        if (!applyCfg(raw)) throw new Error("not an airfield config");
-        if (S.updateStatus) S.updateStatus("Imported " + file.name);
+        var cfg = raw.config || raw.airportConfig || raw;
+        var ok = false;
+        if (raw.app === "blade-staffing" || raw.fte || (raw.functionCoverage && !raw.config && !raw.terminals)) {
+          if (raw.fte && S.applyFte) S.applyFte(raw.fte);
+          applyFunctionCoverage(raw.functionCoverage);
+          ok = true;
+          if (S.updateStatus) S.updateStatus("Imported staffing (FTE + function coverage).");
+        } else {
+          ok = applyAirfield(cfg);
+          applyFunctionCoverage(raw.functionCoverage || (cfg && cfg.functionCoverage));
+          if (raw.fte && S.applyFte) S.applyFte(raw.fte);
+          imported = true;
+          dirty = false;
+          if (S.updateStatus) S.updateStatus("Imported airfield. Continue without saving unless you edit it.");
+        }
+        if (!ok && raw.app !== "blade-staffing") throw new Error("not a recognized config");
         S.openAirfieldConfirm();
       } catch (err) {
         if (S.updateStatus) S.updateStatus("Import failed: " + (err && err.message ? err.message : err));
@@ -216,15 +213,15 @@ window.Scheduler = window.Scheduler || {};
     var modal = document.getElementById("airport-config-modal");
     if (!modal) return;
     var header = modal.querySelector(".modal-header") || modal.querySelector(".modal-content");
-    if (!header) return;
-    if (modal.querySelector("#btn-airfield-import")) return;
+    if (!header || modal.querySelector("#btn-airfield-import")) return;
     var wrap = document.createElement("div");
     wrap.className = "toolbar";
     wrap.style.margin = "0.5rem 0";
     wrap.innerHTML =
       '<button type="button" class="btn" id="btn-airfield-import">Import configuration</button>' +
       '<input type="file" id="file-airfield-import" accept="application/json,.json" style="display:none" />' +
-      '<button type="button" class="btn btn-amber" id="btn-airfield-confirm">Confirm airfield</button>';
+      '<button type="button" class="btn btn-amber" id="btn-airfield-confirm">Confirm airfield</button>' +
+      '<span class="muted" id="airfield-save-hint"></span>';
     header.appendChild(wrap);
     document.getElementById("btn-airfield-import").addEventListener("click", function () {
       var inp = document.getElementById("file-airfield-import");
@@ -236,10 +233,13 @@ window.Scheduler = window.Scheduler || {};
     document.getElementById("btn-airfield-confirm").addEventListener("click", function () {
       S.confirmAirfieldConfig();
     });
+    modal.addEventListener("change", function () { dirty = true; });
+    modal.addEventListener("input", function () { dirty = true; });
   }
 
   function onSetupActive() {
     applyDefaultOnce();
+    if (S.rebuildSetupTab) S.rebuildSetupTab();
     ensureButtons();
     if (!confirmed) S.openAirfieldConfirm();
   }
@@ -257,22 +257,15 @@ window.Scheduler = window.Scheduler || {};
     document.querySelectorAll('.tab-btn[data-tab="setup"]').forEach(function (btn) {
       if (btn._airfieldHooked) return;
       btn._airfieldHooked = true;
-      btn.addEventListener("click", function () {
-        setTimeout(onSetupActive, 0);
-      });
+      btn.addEventListener("click", function () { setTimeout(onSetupActive, 0); });
     });
-  }
-
-  function hideIfIntro() {
-    if (!introIsUp()) return;
-    var modal = document.getElementById("airport-config-modal");
-    if (modal) modal.style.display = "none";
   }
 
   document.addEventListener("DOMContentLoaded", function () {
     applyDefaultOnce();
     hookTabs();
-    hideIfIntro();
+    var modal = document.getElementById("airport-config-modal");
+    if (modal && introIsUp()) modal.style.display = "none";
   });
   window.addEventListener("blade-intro-done", function () {
     hookTabs();
