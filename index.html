@@ -328,28 +328,13 @@
       <span class="modal-close" id="func-coverage-close">&times;</span>
       <div class="modal-header"><h2 class="modal-title">Function coverage</h2></div>
       <div class="grid-2" style="margin-bottom:0.75rem">
-        <label>DFO STSO pool <input type="number" id="fc-pool-stso" min="0" value="0"></label>
-        <label>DFO LTSO pool <input type="number" id="fc-pool-ltso" min="0" value="0"></label>
-        <label>DFO TSO pool <input type="number" id="fc-pool-tso" min="0" value="0"></label>
-        <label>BAG TSO pool <input type="number" id="fc-pool-bag" min="0" value="0"></label>
-        <label>Phase threshold (min) <input type="number" id="fc-phase-thr" min="0" max="120" value="15"></label>
-        <label class="follow-me-label"><input type="checkbox" id="fc-ampm-split" checked /> 50/50 AM–PM pool split</label>
+        <label>DFO STSO pool <input type="number" id="fc-pool-stso-modal" min="0" value="0"></label>
+        <label>DFO LTSO pool <input type="number" id="fc-pool-ltso-modal" min="0" value="0"></label>
+        <label>DFO TSO pool <input type="number" id="fc-pool-tso-modal" min="0" value="0"></label>
+        <label>Phase threshold (min) <input type="number" id="fc-phase-thr-modal" min="0" max="120" value="15"></label>
+        <label class="follow-me-label"><input type="checkbox" id="fc-ampm-split-modal" checked /> 50/50 AM–PM split</label>
       </div>
       <div class="toolbar">
-        <button type="button" class="btn" id="fc-add-band">+ Add band</button>
-      </div>
-      <div class="lines-scroll" style="max-height:50vh">
-        <table class="data-table">
-          <thead>
-            <tr><th>Start</th><th>End</th><th>Min STSO</th><th>Min LTSO</th><th>Min TSO</th><th></th></tr>
-          </thead>
-          <tbody id="fc-bands-tbody"></tbody>
-        </table>
-      </div>
-      <p class="muted" id="fc-preview" style="margin-top:0.75rem"></p>
-      <div class="toolbar" style="margin-top:1rem">
-        <button type="button" class="btn btn-amber" id="fc-generate">Generate function assignments</button>
-        <button type="button" class="btn" id="fc-save">Save bands</button>
         <button type="button" class="btn" id="fc-cancel">Close</button>
       </div>
     </div>
@@ -416,8 +401,9 @@
   <script src="js/instructions.js?v=20260903a"></script>
   <script src="js/main.js?v=20260904f"></script>
   <script src="js/console-chrome.js?v=20260904f"></script>
-  <script src="js/airfield-boot.js?v=20260905f"></script>
-  <script src="js/intro.js?v=20260905f"></script>
+  <script src="js/airfield-boot.js?v=20260905g"></script>
+  <script src="js/setup-ui.js?v=20260905g"></script>
+  <script src="js/intro.js?v=20260905g"></script>
   <script src="js/team-form-smart.js?v=20260904m"></script>
   <script src="js/coverage-cuts.js?v=20260904m"></script>
   <script src="js/team-flags.js?v=20260904m"></script>
