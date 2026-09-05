@@ -41,13 +41,17 @@ window.Scheduler = window.Scheduler || {};
     var stM = val("cfg-stso-m", "2"), stF = val("cfg-stso-f", "2");
     var open = val("cfg-open", "03:30"), close = val("cfg-close", "23:00");
 
-    var shiftsCard = tab.querySelector(".card:has(#shifts-tbody)");
+    var shiftsBody = document.getElementById("shifts-tbody");
+    var shiftsCard = shiftsBody;
+    while (shiftsCard && !(shiftsCard.classList && shiftsCard.classList.contains("card"))) {
+      shiftsCard = shiftsCard.parentElement;
+    }
     var issues = document.getElementById("issues");
-    var intro = tab.querySelector(".card");
+    var firstCard = tab.querySelector(".card");
 
     var html =
       '<div class="card" id="card-what">' +
-        (intro ? intro.innerHTML : '<div class="section-title">What this is</div>') +
+        (firstCard ? firstCard.innerHTML : '<div class="section-title">What this is</div>') +
       "</div>" +
       '<input type="hidden" id="cfg-open" value="' + open + '">' +
       '<input type="hidden" id="cfg-close" value="' + close + '">' +
@@ -59,7 +63,7 @@ window.Scheduler = window.Scheduler || {};
         "</div>" +
       "</div>" +
       '<details class="card setup-fold" id="card-fte">' +
-        "<summary class=\"section-title\">FTE</summary>" +
+        '<summary class="section-title">FTE</summary>' +
         '<div class="fte-block">' +
           '<div class="fte-role">FT TSO</div>' + sexRow("cfg-ft-m", "cfg-ft-f", ftM, ftF) +
           '<div class="fte-role">PT TSO</div>' + sexRow("cfg-pt-m", "cfg-pt-f", ptM, ptF) +
@@ -72,7 +76,7 @@ window.Scheduler = window.Scheduler || {};
         "</div>" +
       "</details>" +
       '<details class="card setup-fold" id="card-func">' +
-        "<summary class=\"section-title\">Function coverage</summary>" +
+        '<summary class="section-title">Function coverage</summary>' +
         '<div class="fc-inline">' +
           '<div class="fc-pool-row">' +
             '<label>DFO STSO <input type="number" id="fc-pool-stso" min="0" value="0" style="width:4rem"></label>' +
@@ -97,20 +101,11 @@ window.Scheduler = window.Scheduler || {};
     tab.innerHTML = html;
     keep.forEach(function (node) { tab.appendChild(node); });
 
-    var oldOpen = document.getElementById("btn-open-func-coverage");
-    if (oldOpen && oldOpen.closest(".card")) {
-      /* leftover modal trigger card already replaced */
-    }
     var modalBag = document.getElementById("fc-pool-bag");
-    if (modalBag) {
-      modalBag.removeAttribute("id");
-      modalBag.id = "fc-pool-bag-unused";
-    }
+    if (modalBag) { modalBag.id = "fc-pool-bag-unused"; }
     ["fc-pool-stso", "fc-pool-ltso", "fc-pool-tso", "fc-phase-thr", "fc-ampm-split", "fc-add-band", "fc-bands-tbody", "fc-preview"].forEach(function (id) {
       var nodes = document.querySelectorAll("#" + id);
-      if (nodes.length > 1) {
-        for (var i = 1; i < nodes.length; i++) nodes[i].removeAttribute("id");
-      }
+      for (var i = 1; i < nodes.length; i++) nodes[i].removeAttribute("id");
     });
 
     var save = document.getElementById("btn-save-staffing");
@@ -143,9 +138,6 @@ window.Scheduler = window.Scheduler || {};
     function put(id, v) {
       var el = document.getElementById(id);
       if (el && v != null) el.value = v;
-      if (S.state && id.indexOf("cfg-") === 0) {
-        /* mapped below */
-      }
     }
     put("cfg-ft-m", fte.ftM); put("cfg-ft-f", fte.ftF);
     put("cfg-pt-m", fte.ptM); put("cfg-pt-f", fte.ptF);
