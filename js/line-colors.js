@@ -1,53 +1,44 @@
-/** Paint RDO black / BAG red / work days by that day's mod set */
+/** Paint RDO black / BAG red / DFO yellow on the Lines tab */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
-  var MODSET_COLORS = ["#2A9D8F", "#E76F51", "#6A4C93", "#90BE6D", "#F4A261", "#457B9D", "#E9C46A", "#D62828", "#2D6A4F", "#9B5DE5", "#00BBF9", "#FB5607"];
-  var TEAM_COLORS = ["#BDE0FE", "#CDB4DB", "#A8DADC", "#FFC8DD", "#B5EAD7", "#FFDAC1", "#C7CEEA", "#E2F0CB"];
-
   function dutyFor(line, dayIndex) {
     var duty = S.getRotationDuty ? S.getRotationDuty(line.id, dayIndex) : null;
-    return duty || line.function || null;
+    if (duty) return duty;
+    return line.function || null;
   }
   function workLabel(line) {
     if (line.shiftLabel) return line.shiftLabel;
     var sh = S.getShift ? S.getShift(line.shiftId) : null;
     if (sh && sh.start && sh.end) return sh.start + "\u2013" + sh.end;
+    if (sh && sh.start) return sh.start;
     return "WORK";
   }
-  function teamOf(line) {
-    if (!S.teams || !S.teams.teams) return null;
-    var id = line && line.id;
-    for (var i = 0; i < S.teams.teams.length; i++) {
-      var t = S.teams.teams[i], members = t.members || [];
-      for (var j = 0; j < members.length; j++) {
-        if (String(members[j]) === String(id)) return t;
-      }
+  function applyBagDutyToWorkDays(line) {
+    if (!line || line.function !== "BAG") return;
+    if (!S.state.functionRotation) S.state.functionRotation = {};
+    var key = String(line.id);
+    if (!S.state.functionRotation[key]) S.state.functionRotation[key] = [];
+    var sched = S.state.schedule[line.id] || S.state.schedule[key] || [];
+    var days = Math.max(sched.length, (S.state.weekCount || 1) * 7);
+    for (var i = 0; i < days; i++) {
+      while (S.state.functionRotation[key].length <= i) S.state.functionRotation[key].push(null);
+      if (sched[i] === "WORK") S.state.functionRotation[key][i] = "BAG";
     }
-    return null;
   }
-  function modColor(line, day) {
-    var team = teamOf(line);
-    var msId = null;
-    if (team && S.modSetForTeamDay) msId = S.modSetForTeamDay(team.id, day);
-    if (msId == null && line && line.modSetId != null) msId = line.modSetId;
-    var list = S.listModSets ? S.listModSets() : [];
-    for (var i = 0; i < list.length; i++) {
-      if (String(list[i].id) === String(msId)) return MODSET_COLORS[i % MODSET_COLORS.length];
+  function applyDfoDutyToWorkDays(line) {
+    if (!line || line.function !== "DFO") return;
+    if (!S.state.functionRotation) S.state.functionRotation = {};
+    var key = String(line.id);
+    if (!S.state.functionRotation[key]) S.state.functionRotation[key] = [];
+    var sched = S.state.schedule[line.id] || S.state.schedule[key] || [];
+    var days = Math.max(sched.length, (S.state.weekCount || 1) * 7);
+    for (var i = 0; i < days; i++) {
+      while (S.state.functionRotation[key].length <= i) S.state.functionRotation[key].push(null);
+      if (sched[i] === "WORK") S.state.functionRotation[key][i] = "DFO";
     }
-    return null;
   }
-  function teamColor(line) {
-    var team = teamOf(line);
-    if (!team || !S.teams) return null;
-    var idx = 0;
-    for (var i = 0; i < S.teams.teams.length; i++) {
-      if (S.teams.teams[i].id === team.id) { idx = i; break; }
-    }
-    return TEAM_COLORS[idx % TEAM_COLORS.length];
-  }
-
   function paintLinesTable() {
     var tbody = document.getElementById("lines-tbody");
     if (!tbody) return;
@@ -68,29 +59,14 @@ window.Scheduler = window.Scheduler || {};
       }
       var duty = dutyFor(line, day);
       var isBag = duty === "BAG" || duty === "BAGS";
-      var extra = isBag ? " cell-function-duty cell-bag" : "";
+      var isDfo = duty === "DFO";
+      var extra = "";
+      if (isBag) extra = " cell-function-duty cell-bag";
+      else if (isDfo) extra = " cell-function-duty cell-dfo";
       cell.className = "cell-work cell-toggle" + extra;
       cell.textContent = workLabel(line);
-      var fill = isBag ? "" : modColor(line, day);
-      if (fill) {
-        cell.style.background = fill;
-        cell.style.color = "#111";
-        cell.style.opacity = "1";
-      }
-    });
-    tbody.querySelectorAll("tr").forEach(function (tr) {
-      var toggle = tr.querySelector("td.cell-toggle");
-      if (!toggle) return;
-      var line = S.findLineById ? S.findLineById(toggle.getAttribute("data-line-id")) : null;
-      if (!line) return;
-      var tc = teamColor(line);
-      if (tr.children[0] && tc) {
-        tr.children[0].style.background = tc;
-        tr.children[0].style.color = "#111";
-      }
     });
   }
-
   S.paintLineColors = paintLinesTable;
   function wrap(name) {
     var orig = S[name];
@@ -105,9 +81,22 @@ window.Scheduler = window.Scheduler || {};
   }
   wrap("renderLines");
   wrap("renderAll");
+  wrap("generateFunctionAssignments");
+  document.addEventListener("change", function (e) {
+    var t = e.target;
+    if (!t || t.getAttribute("data-field") !== "function") return;
+    var line = S.findLineById ? S.findLineById(t.getAttribute("data-line-id")) : null;
+    if (!line) return;
+    line.function = t.value === "DFO" || t.value === "PAX" || t.value === "BAG" ? t.value : "";
+    if (line.function === "BAG") applyBagDutyToWorkDays(line);
+    if (line.function === "DFO") applyDfoDutyToWorkDays(line);
+    if (S.renderLines) S.renderLines();
+    else paintLinesTable();
+  });
   document.addEventListener("DOMContentLoaded", function () {
     wrap("renderLines");
     wrap("renderAll");
+    wrap("generateFunctionAssignments");
     paintLinesTable();
   });
 })(window.Scheduler);
