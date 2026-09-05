@@ -1,4 +1,4 @@
-/** Paint RDO black / BAG red / DFO yellow / work days by mod set */
+/** Paint RDO black / BAG red / work days by that day's mod set */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
@@ -8,8 +8,7 @@ window.Scheduler = window.Scheduler || {};
 
   function dutyFor(line, dayIndex) {
     var duty = S.getRotationDuty ? S.getRotationDuty(line.id, dayIndex) : null;
-    if (duty) return duty;
-    return line.function || null;
+    return duty || line.function || null;
   }
   function workLabel(line) {
     if (line.shiftLabel) return line.shiftLabel;
@@ -21,17 +20,18 @@ window.Scheduler = window.Scheduler || {};
     if (!S.teams || !S.teams.teams) return null;
     var id = line && line.id;
     for (var i = 0; i < S.teams.teams.length; i++) {
-      var t = S.teams.teams[i];
-      var members = t.members || [];
+      var t = S.teams.teams[i], members = t.members || [];
       for (var j = 0; j < members.length; j++) {
         if (String(members[j]) === String(id)) return t;
       }
     }
     return null;
   }
-  function modColor(line) {
+  function modColor(line, day) {
     var team = teamOf(line);
-    var msId = (line && line.modSetId) != null ? line.modSetId : (team && team.modSetId);
+    var msId = null;
+    if (team && S.modSetForTeamDay) msId = S.modSetForTeamDay(team.id, day);
+    if (msId == null && line && line.modSetId != null) msId = line.modSetId;
     var list = S.listModSets ? S.listModSets() : [];
     for (var i = 0; i < list.length; i++) {
       if (String(list[i].id) === String(msId)) return MODSET_COLORS[i % MODSET_COLORS.length];
@@ -40,7 +40,7 @@ window.Scheduler = window.Scheduler || {};
   }
   function teamColor(line) {
     var team = teamOf(line);
-    if (!team) return null;
+    if (!team || !S.teams) return null;
     var idx = 0;
     for (var i = 0; i < S.teams.teams.length; i++) {
       if (S.teams.teams[i].id === team.id) { idx = i; break; }
@@ -68,38 +68,30 @@ window.Scheduler = window.Scheduler || {};
       }
       var duty = dutyFor(line, day);
       var isBag = duty === "BAG" || duty === "BAGS";
-      var isDfo = duty === "DFO";
-      var extra = isBag ? " cell-function-duty cell-bag" : isDfo ? " cell-function-duty cell-dfo" : "";
+      var extra = isBag ? " cell-function-duty cell-bag" : "";
       cell.className = "cell-work cell-toggle" + extra;
       cell.textContent = workLabel(line);
-      var fill = isBag ? "" : modColor(line);
+      var fill = isBag ? "" : modColor(line, day);
       if (fill) {
         cell.style.background = fill;
         cell.style.color = "#111";
         cell.style.opacity = "1";
       }
     });
-    var thead = document.getElementById("lines-thead");
-    if (thead) {
-      var ths = thead.querySelectorAll("th");
-      if (ths.length) ths[0].title = "Team fill on export";
-    }
     tbody.querySelectorAll("tr").forEach(function (tr) {
       var toggle = tr.querySelector("td.cell-toggle");
       if (!toggle) return;
       var line = S.findLineById ? S.findLineById(toggle.getAttribute("data-line-id")) : null;
       if (!line) return;
       var tc = teamColor(line);
-      var teamCell = tr.children[0];
-      if (teamCell && tc) {
-        teamCell.style.background = tc;
-        teamCell.style.color = "#111";
+      if (tr.children[0] && tc) {
+        tr.children[0].style.background = tc;
+        tr.children[0].style.color = "#111";
       }
     });
   }
 
   S.paintLineColors = paintLinesTable;
-
   function wrap(name) {
     var orig = S[name];
     if (typeof orig !== "function" || orig._lineColorsWrapped) return;
@@ -113,7 +105,6 @@ window.Scheduler = window.Scheduler || {};
   }
   wrap("renderLines");
   wrap("renderAll");
-  wrap("generateFunctionAssignments");
   document.addEventListener("DOMContentLoaded", function () {
     wrap("renderLines");
     wrap("renderAll");
