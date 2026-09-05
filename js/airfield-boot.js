@@ -1,14 +1,17 @@
-/** Setup boot: load airfield config, show modal, confirm to airport folder or download */
+/** Open airfield modal on boot. Web has no folder; localStorage + optional download. */
 window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
-  var CONFIRMED = "blade.airfieldConfirmed";
-
-  function invoke(cmd, args) {
-    var core = window.__TAURI__ && window.__TAURI__.core;
-    if (core && typeof core.invoke === "function") return core.invoke(cmd, args || {});
-    return Promise.reject(new Error("no-tauri"));
+  function payload() {
+    var cfg = S.getAirportConfig ? S.getAirportConfig() : {};
+    return {
+      app: "blade-airfield",
+      version: 1,
+      airport: S.getAirportCode ? S.getAirportCode() : "",
+      savedAt: new Date().toISOString(),
+      config: cfg
+    };
   }
 
   function downloadJson(filename, obj) {
@@ -23,96 +26,48 @@ window.Scheduler = window.Scheduler || {};
     URL.revokeObjectURL(url);
   }
 
-  function payload() {
-    var cfg = S.getAirportConfig ? S.getAirportConfig() : {};
-    return {
-      app: "blade-airfield",
-      version: 1,
-      airport: S.getAirportCode ? S.getAirportCode() : "",
-      savedAt: new Date().toISOString(),
-      config: cfg
-    };
-  }
-
-  function applyLoaded(raw) {
-    var dest = S.getAirportConfig && S.getAirportConfig();
-    if (!dest || !raw) return false;
-    var cfg = raw.config || raw.airportConfig || raw;
-    if (!cfg || typeof cfg !== "object") return false;
-    if (cfg.startTime) dest.startTime = cfg.startTime;
-    if (cfg.endTime) dest.endTime = cfg.endTime;
-    if (cfg.volumePerHour) dest.volumePerHour = cfg.volumePerHour;
-    if (Array.isArray(cfg.terminals)) dest.terminals = cfg.terminals;
+  S.openAirfieldConfirm = function () {
+    var modal = document.getElementById("airport-config-modal");
+    if (!modal) return false;
+    modal.style.display = "block";
+    modal.style.zIndex = "10050";
+    modal.style.visibility = "visible";
+    modal.style.opacity = "1";
+    ensureConfirmButton();
     return true;
-  }
-
-  function tryFetchWeb() {
-    var code = S.getAirportCode ? S.getAirportCode() : "";
-    var names = [];
-    if (code) names.push("airport/" + code + "-airfield.json");
-    names.push("airport/airfield.json");
-    var chain = Promise.reject();
-    names.forEach(function (url) {
-      chain = chain.catch(function () {
-        return fetch(url, { cache: "no-store" }).then(function (r) {
-          if (!r.ok) throw new Error("missing " + url);
-          return r.json();
-        });
-      });
-    });
-    return chain;
-  }
-
-  function tryReadFolder() {
-    var code = S.getAirportCode ? S.getAirportCode() : "";
-    if (!code || !S.isTauri || !S.isTauri()) return Promise.reject(new Error("no-folder"));
-    return invoke("read_shared_file", { filename: "airfield.json", airport: code }).then(function (text) {
-      return JSON.parse(text);
-    });
-  }
+  };
 
   S.exportAirfieldConfig = function () {
     var data = payload();
-    var code = data.airport || "XXX";
-    var filename = code + "_airfield.json";
-    if (S.isTauri && S.isTauri()) {
+    var filename = (data.airport || "WEB") + "_airfield.json";
+    try { localStorage.setItem("blade.airfieldJson", JSON.stringify(data)); } catch (e) {}
+    var core = window.__TAURI__ && window.__TAURI__.core;
+    if (core && typeof core.invoke === "function" && data.airport) {
       var bytes = Array.from(new TextEncoder().encode(JSON.stringify(data, null, 2)));
-      return invoke("write_shared_bytes", {
+      return core.invoke("write_shared_bytes", {
         filename: "airfield.json",
         bytes: bytes,
-        airport: code
+        airport: data.airport
       }).then(function (path) {
         if (S.updateStatus) S.updateStatus("Saved airfield to " + path);
-        return path;
-      }).catch(function (err) {
+      }).catch(function () {
         downloadJson(filename, data);
-        if (S.updateStatus) S.updateStatus("Folder write failed, downloaded " + filename + " (" + err + ")");
       });
     }
     downloadJson(filename, data);
-    if (S.updateStatus) S.updateStatus("Downloaded " + filename + " (web — drop it in the airport folder).");
+    if (S.updateStatus) S.updateStatus("Downloaded " + filename);
     return Promise.resolve();
   };
 
   S.confirmAirfieldConfig = function () {
-    try { sessionStorage.setItem(CONFIRMED, "1"); } catch (e) {}
     return S.exportAirfieldConfig().then(function () {
-      var modal = S.$("airport-config-modal");
+      var modal = document.getElementById("airport-config-modal");
       if (modal) modal.style.display = "none";
     });
   };
 
-  S.openAirfieldConfirm = function () {
-    var modal = S.$("airport-config-modal");
-    if (modal) modal.style.display = "block";
-    if (S.initAirportConfig) {
-      /* already inited; just re-render if present */
-    }
-    ensureConfirmButton();
-  };
-
   function ensureConfirmButton() {
-    var modal = S.$("airport-config-modal");
+    var modal = document.getElementById("airport-config-modal");
     if (!modal || modal.querySelector("#btn-airfield-confirm")) return;
     var header = modal.querySelector(".modal-header") || modal.querySelector(".modal-content");
     if (!header) return;
@@ -121,46 +76,40 @@ window.Scheduler = window.Scheduler || {};
     bar.style.margin = "0.5rem 0";
     bar.innerHTML =
       '<button type="button" class="btn btn-amber" id="btn-airfield-confirm">Confirm airfield</button>' +
-      '<span class="muted">Saves airfield.json to the airport folder. Web downloads the file.</span>';
+      '<span class="muted">Web: saves in this browser and downloads JSON.</span>';
     header.appendChild(bar);
-    S.$("btn-airfield-confirm").addEventListener("click", function () {
+    document.getElementById("btn-airfield-confirm").addEventListener("click", function () {
       S.confirmAirfieldConfig();
     });
   }
 
-  S.loadAirfieldFromFolder = function () {
-    return tryReadFolder().catch(function () {
-      return tryFetchWeb();
-    }).then(function (raw) {
-      if (applyLoaded(raw) && S.updateStatus) S.updateStatus("Loaded airfield configuration.");
-      return raw;
-    }).catch(function () {
-      if (S.updateStatus) S.updateStatus("No airfield file found. Confirm the seeded layout.");
-      return null;
-    });
-  };
+  function tryStored() {
+    try {
+      var raw = localStorage.getItem("blade.airfieldJson");
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      var dest = S.getAirportConfig && S.getAirportConfig();
+      var cfg = data && (data.config || data);
+      if (!dest || !cfg) return;
+      if (cfg.startTime) dest.startTime = cfg.startTime;
+      if (cfg.endTime) dest.endTime = cfg.endTime;
+      if (cfg.volumePerHour) dest.volumePerHour = cfg.volumePerHour;
+      if (Array.isArray(cfg.terminals)) dest.terminals = cfg.terminals;
+    } catch (e) {}
+  }
 
-  function bootOnce() {
-    if (S._airfieldBooted) return;
-    S._airfieldBooted = true;
+  function boot() {
+    tryStored();
     ensureConfirmButton();
-    S.loadAirfieldFromFolder().then(function () {
-      var already = false;
-      try { already = sessionStorage.getItem(CONFIRMED) === "1"; } catch (e) {}
-      if (!already) S.openAirfieldConfirm();
-    });
+    S.openAirfieldConfirm();
   }
 
-  if (typeof S.initAirportConfig === "function" && !S.initAirportConfig._bootWrapped) {
-    var orig = S.initAirportConfig;
-    S.initAirportConfig = function () {
-      orig.apply(this, arguments);
-      bootOnce();
-    };
-    S.initAirportConfig._bootWrapped = true;
-  }
-
+  window.addEventListener("blade-intro-done", boot);
   document.addEventListener("DOMContentLoaded", function () {
-    setTimeout(bootOnce, 300);
+    boot();
+    setTimeout(boot, 600);
+    setTimeout(boot, 1800);
+    setTimeout(boot, 3200);
   });
+  setTimeout(boot, 400);
 })(window.Scheduler);
