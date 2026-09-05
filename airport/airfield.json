@@ -1,7 +1,6 @@
 {
   "app": "blade-airfield",
   "version": 1,
-  "airport": "DFW",
   "config": {
     "startTime": "03:30",
     "endTime": "23:00",
@@ -9,28 +8,23 @@
     "terminals": [
       {
         "id": 1,
-        "name": "Terminal A",
+        "name": "Terminal 1",
         "startTime": "03:30",
         "endTime": "23:00",
         "baseTSOCost": { "STD": 6, "PRE": 5, "MIX": 6 },
         "checkpoints": [
           {
             "id": 1,
-            "name": "A Main",
+            "name": "Checkpoint 1",
             "startTime": "03:30",
             "endTime": "23:00",
             "modSets": [
               { "id": 1, "name": "MS-1", "startTime": "03:30", "lanes": 2, "program": "STD" },
-              { "id": 2, "name": "MS-2", "startTime": "05:00", "lanes": 2, "program": "MIX" }
-            ]
-          },
-          {
-            "id": 2,
-            "name": "A PreCheck",
-            "startTime": "04:00",
-            "endTime": "21:00",
-            "modSets": [
-              { "id": 3, "name": "MS-3", "startTime": "04:00", "lanes": 2, "program": "PRE" }
+              { "id": 2, "name": "MS-2", "startTime": "03:30", "lanes": 2, "program": "STD" },
+              { "id": 3, "name": "MS-3", "startTime": "03:30", "lanes": 2, "program": "STD" },
+              { "id": 4, "name": "MS-4", "startTime": "03:30", "lanes": 2, "program": "PRE" },
+              { "id": 5, "name": "MS-5", "startTime": "03:30", "lanes": 2, "program": "PRE" },
+              { "id": 6, "name": "MS-6", "startTime": "03:30", "lanes": 2, "program": "PRE" }
             ]
           }
         ]
