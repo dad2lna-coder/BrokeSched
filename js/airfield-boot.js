@@ -3,6 +3,8 @@ window.Scheduler = window.Scheduler || {};
 (function (S) {
   "use strict";
 
+  var seeded = false;
+
   function defaultConfig() {
     return {
       startTime: "03:30",
@@ -43,10 +45,21 @@ window.Scheduler = window.Scheduler || {};
     if (cfg.endTime) d.endTime = cfg.endTime;
     if (cfg.volumePerHour) d.volumePerHour = cfg.volumePerHour;
     if (Array.isArray(cfg.terminals)) d.terminals = cfg.terminals;
+    seeded = true;
     return true;
   }
 
-  function applyDefault() {
+  function applyDefaultOnce() {
+    if (seeded) return;
+    var d = dest();
+    if (d && d.terminals && d.terminals.length) {
+      /* replace the old 2-checkpoint seed with the requested default */
+      var cps = (d.terminals[0] && d.terminals[0].checkpoints) || [];
+      var sets = cps[0] && cps[0].modSets ? cps[0].modSets.length : 0;
+      if (d.terminals.length !== 1 || cps.length !== 1 || sets !== 6) applyCfg(defaultConfig());
+      else seeded = true;
+      return;
+    }
     applyCfg(defaultConfig());
   }
 
@@ -117,15 +130,10 @@ window.Scheduler = window.Scheduler || {};
         var cfg = raw.config || raw.airportConfig || raw;
         if (!applyCfg(cfg)) throw new Error("not an airfield config");
         if (S.updateStatus) S.updateStatus("Imported " + file.name);
-        if (typeof S.initAirportConfig === "function") {
-          /* re-render via opening */
-        }
-        var list = document.getElementById("terminals-list");
-        if (list && S.getAirportConfig) {
-          var openBtn = document.getElementById("btn-airport-config");
-          if (openBtn) openBtn.click();
-          S.openAirfieldConfirm();
-        }
+        S.openAirfieldConfirm();
+        var openBtn = document.getElementById("btn-airport-config");
+        if (openBtn) openBtn.click();
+        S.openAirfieldConfirm();
       } catch (err) {
         if (S.updateStatus) S.updateStatus("Import failed: " + (err && err.message ? err.message : err));
       }
@@ -138,30 +146,29 @@ window.Scheduler = window.Scheduler || {};
     if (!modal) return;
     var header = modal.querySelector(".modal-header") || modal.querySelector(".modal-content");
     if (!header) return;
-    if (!modal.querySelector("#btn-airfield-import")) {
-      var wrap = document.createElement("div");
-      wrap.className = "toolbar";
-      wrap.style.margin = "0.5rem 0";
-      wrap.innerHTML =
-        '<button type="button" class="btn" id="btn-airfield-import">Import configuration</button>' +
-        '<input type="file" id="file-airfield-import" accept="application/json,.json" style="display:none" />' +
-        '<button type="button" class="btn btn-amber" id="btn-airfield-confirm">Confirm airfield</button>';
-      header.appendChild(wrap);
-      document.getElementById("btn-airfield-import").addEventListener("click", function () {
-        var inp = document.getElementById("file-airfield-import");
-        if (inp) { inp.value = ""; inp.click(); }
-      });
-      document.getElementById("file-airfield-import").addEventListener("change", function (e) {
-        S.importAirfieldFile(e.target.files && e.target.files[0]);
-      });
-      document.getElementById("btn-airfield-confirm").addEventListener("click", function () {
-        S.confirmAirfieldConfig();
-      });
-    }
+    if (modal.querySelector("#btn-airfield-import")) return;
+    var wrap = document.createElement("div");
+    wrap.className = "toolbar";
+    wrap.style.margin = "0.5rem 0";
+    wrap.innerHTML =
+      '<button type="button" class="btn" id="btn-airfield-import">Import configuration</button>' +
+      '<input type="file" id="file-airfield-import" accept="application/json,.json" style="display:none" />' +
+      '<button type="button" class="btn btn-amber" id="btn-airfield-confirm">Confirm airfield</button>';
+    header.appendChild(wrap);
+    document.getElementById("btn-airfield-import").addEventListener("click", function () {
+      var inp = document.getElementById("file-airfield-import");
+      if (inp) { inp.value = ""; inp.click(); }
+    });
+    document.getElementById("file-airfield-import").addEventListener("change", function (e) {
+      S.importAirfieldFile(e.target.files && e.target.files[0]);
+    });
+    document.getElementById("btn-airfield-confirm").addEventListener("click", function () {
+      S.confirmAirfieldConfig();
+    });
   }
 
   function boot() {
-    applyDefault();
+    applyDefaultOnce();
     ensureButtons();
     S.openAirfieldConfirm();
   }
